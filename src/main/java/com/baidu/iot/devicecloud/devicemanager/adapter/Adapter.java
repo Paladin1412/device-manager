@@ -99,7 +99,7 @@ public class Adapter {
         DataPointMessage assembled = new DataPointMessage();
         assembled.setVersion(origin != null ? origin.getVersion() : DEFAULT_VERSION);
         assembled.setId(origin != null ? origin.getId() : IdGenerator.nextId());
-        assembled.setCode(CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID);
+        assembled.setCode(CoapConstant.COAP_METHOD_PUT);
         assembled.setPath(PathUtil.lookAfterPrefix(DataPointConstant.DATA_POINT_DUER_DIRECTIVE));
         assembled.setPayload(JsonUtil.serialize(directive));
         return assembled;
