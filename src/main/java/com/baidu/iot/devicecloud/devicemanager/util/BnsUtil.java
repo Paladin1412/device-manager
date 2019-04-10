@@ -28,6 +28,7 @@ public class BnsUtil {
     private final static String JPAAS_CLUSTER_NAME = "JPAAS_CLUSTER_NAME";
     private final static Map<String, List<String>> bnsMap = new HashMap<>();
     private final static Map<String, String> bnsName = new HashMap<>();
+    private final static Object lock = new Object();
 
     private final static Map<String, String> clusterIdcMap = new HashMap<String, String>() {
         {
@@ -139,7 +140,7 @@ public class BnsUtil {
         }
 
         List<String> addressList;
-        synchronized (bns.intern()) {
+        synchronized (lock) {
             addressList = bnsMap.get(bns);
             if (null == addressList || addressList.size() < 1) {
                 log.info("first get bns address,key={}", bns);
@@ -177,7 +178,7 @@ public class BnsUtil {
 
         String bnsIp = null;
         if (!StringUtils.isEmpty(bns)) {
-            synchronized (bns.intern()) {
+            synchronized (lock) {
                 bnsIp = getBNSAddress(bns);
             }
         }
