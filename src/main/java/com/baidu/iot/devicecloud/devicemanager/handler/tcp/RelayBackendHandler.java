@@ -16,9 +16,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CUID;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.SN;
@@ -40,8 +37,6 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     private final UnicastProcessor<TlvMessage> workQueue;
     private final DirectiveProcessor directiveProcessor;
 
-    private final List<TlvMessage> originMessages;
-
     private String cuid = null;
     private String sn = null;
 
@@ -62,8 +57,6 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
         this.directiveProcessor = directiveProcessor;
         this.workQueue =
                 UnicastProcessor.create(Queues.<TlvMessage>xs().get());
-
-        originMessages = new ArrayList<>();
     }
 
     @Override
@@ -79,7 +72,14 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
 
                 downstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMED);
                 log.debug("{} has been confirmed by dcs. Subscribing to asr", upstreamChannel.toString());
-                workQueue.subscribe(NettyUtil.good2Go(downstreamChannel).<TlvMessage>get());
+                workQueue.collectList()
+                        .flatMapMany(list -> Flux.fromStream(
+                                Adapter.directive2DataPointTLV(
+                                        directiveProcessor.process(this.cuid, this.sn, list),
+                                        TlvConstant.TYPE_DOWNSTREAM_DUMI
+                                ).stream()
+                        ))
+                        .subscribe(NettyUtil.good2Go(downstreamChannel).<TlvMessage>get());
 
                 this.cuid = upstreamChannel.attr(CUID).get();
                 this.sn = upstreamChannel.attr(SN).get();
@@ -99,20 +99,12 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
         // do something with the received msg, like requesting tts
 
         if (initialPackageHasArrived) {
-            collectMsg(msg);
+            workQueue.onNext(msg);
 
             if (isDownstreamFinishPackage(msg)) {
                 log.debug("The downstream finish package(0xF004) has come, {}, completing the work queue",
                         msg.toString());
-                Flux.fromStream(
-                        Adapter.directive2DataPointTLV(
-                                directiveProcessor.process(this.cuid, this.sn, this.originMessages),
-                                TlvConstant.TYPE_DOWNSTREAM_DUMI
-                        ).stream()
-                )
-                        .doOnNext(workQueue::onNext)
-                        .doFinally(signalType -> workQueue.onComplete())
-                        .subscribe(NettyUtil.good2Go(downstreamChannel).<TlvMessage>get());
+                workQueue.onComplete();
             }
             return;
         }
@@ -151,9 +143,5 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
             }
         }
         super.userEventTriggered(ctx, evt);
-    }
-
-    private void collectMsg(TlvMessage message) {
-        originMessages.add(message);
     }
 }
