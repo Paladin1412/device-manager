@@ -25,9 +25,12 @@ import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_POST;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_DELETE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_EMPTY;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_PUT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_NEED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_SECRET_KEY;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
@@ -55,12 +58,11 @@ public class PushHandler {
         assembleFromHeader.accept(request, message);
         request.queryParam("clt_id").ifPresent(message::setCltId);
         request.queryParam("msgid").ifPresent(message::setLogId);
+        int method = figureOutMethod(request);
 //        message.setNeedAck(true);
         List<Integer> idList = new ArrayList<>();
         return request.body(BodyExtractors.toMultipartData())
                 .flatMap(parts -> {
-                    parts
-                            .forEach((k, v) -> log.info("{}: {}", k, v));
                     // The order of directives would be sent to device
                     List<Part> metadata = parts.getOrDefault("metadata", new ArrayList<>());
                     if (metadata.size() < 1) {
@@ -69,7 +71,7 @@ public class PushHandler {
                     List<Part> audio = parts.getOrDefault("audio", new ArrayList<>());
 
                     String key = pushService.pool(message);
-                    List<DataPointMessage> messages = assemble(metadata, audio, idList, key, message);
+                    List<DataPointMessage> messages = assemble(method, metadata, audio, idList, key, message);
                     return pushService.push(messages)
                             .flatMap(baseResponse -> {
                                 if (baseResponse.getCode() == 0) {
@@ -83,7 +85,24 @@ public class PushHandler {
                 });
     }
 
-    private List<DataPointMessage> assemble(List<Part> metadata,
+    private int figureOutMethod(ServerRequest request) {
+        Optional<String> optMethod = request.queryParam("method");
+        // default method
+        int method = COAP_METHOD_PUT;
+        if (optMethod.isPresent()) {
+            String methodStr = optMethod.get();
+            try {
+                int opt = Integer.parseInt(methodStr);
+                if (opt >= COAP_METHOD_EMPTY && opt <= COAP_METHOD_DELETE) {
+                    method = opt;
+                }
+            } catch (NumberFormatException ignore) {}
+        }
+        return method;
+    }
+
+    private List<DataPointMessage> assemble(int method,
+                                            List<Part> metadata,
                                             List<Part> audios,
                                             List<Integer> idList,
                                             String key,
@@ -94,10 +113,11 @@ public class PushHandler {
         } else {
             metadataJson = pushService.readJson(metadata);
         }
-        return assembleDirective(metadataJson, idList, key, origin);
+        return assembleDirective(method, metadataJson, idList, key, origin);
     }
 
-    private List<DataPointMessage> assembleDirective(List<JsonNode> directives,
+    private List<DataPointMessage> assembleDirective(int method,
+                                                     List<JsonNode> directives,
                                                      List<Integer> idList,
                                                      String key,
                                                      BaseMessage origin) {
@@ -105,15 +125,19 @@ public class PushHandler {
                 .map(jsonNode -> {
                     int id = IdGenerator.nextId();
                     idList.add(id);
-                    return assembleDirective0(jsonNode, id, key, origin);
+                    return assembleDirective0(method, jsonNode, id, key, origin);
                 })
                 .collect(Collectors.toList());
     }
 
-    private DataPointMessage assembleDirective0(JsonNode directiveJson, int id, String key, BaseMessage origin) {
+    private DataPointMessage assembleDirective0(int method,
+                                                JsonNode directiveJson,
+                                                int id,
+                                                String key,
+                                                BaseMessage origin) {
         DataPointMessage assembled = new DataPointMessage();
         assembled.setId(id);
-        assembled.setCode(COAP_METHOD_POST);
+        assembled.setCode(method);
         assembled.setPath(PathUtil.lookAfterPrefix(DataPointConstant.DATA_POINT_DUER_DIRECTIVE));
         assembled.setVersion(DEFAULT_VERSION);
         assembled.setPayload(directiveJson.toString());
