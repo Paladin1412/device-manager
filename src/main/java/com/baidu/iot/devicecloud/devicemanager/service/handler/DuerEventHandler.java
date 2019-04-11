@@ -192,6 +192,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             requestQueue.onNext(data);
         }
         requestQueue.onNext(finishPackage.apply(message));
+        requestQueue.onComplete();
         return Mono.from(Flux.push(fluxSink -> responseQueue.subscribe(new BaseSubscriber<TlvMessage>() {
             @Override
             protected void hookOnNext(TlvMessage value) {
@@ -274,13 +275,10 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
 
     private final class DisconnectedHandler extends ChannelOutboundHandlerAdapter {
         @Override
-        public void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+        public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
             Channel channel = ctx.channel();
-            log.debug("{} has disconnected from dcs", channel.toString());
-            if (channel.isActive()) {
-                channel.disconnect();
-            }
-            super.disconnect(ctx, promise);
+            log.debug("{} has closed from dcs", channel.toString());
+            super.close(ctx, promise);
         }
     }
 

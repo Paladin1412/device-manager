@@ -70,7 +70,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
                 responseQueue.onComplete();
                 // closing this tcp connection to dcs
                 if (upstreamChannel.isActive()) {
-                    upstreamChannel.disconnect();
+                    upstreamChannel.close();
                 }
             } else {
                 responseQueue.onNext(msg);
