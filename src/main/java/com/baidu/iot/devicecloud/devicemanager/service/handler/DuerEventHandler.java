@@ -43,8 +43,10 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
 import okio.Buffer;
+import okio.ByteString;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.BaseSubscriber;
@@ -60,6 +62,7 @@ import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -68,6 +71,7 @@ import java.util.stream.Collectors;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CONTENT_TYPE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
@@ -89,6 +93,7 @@ import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlu
 @Component
 public class DuerEventHandler extends AbstractLinkableDataPointHandler {
     private static final String KEY_PATTERN = "%s_%s_%s";
+    private static final byte[] CRLF = {'\r', '\n'};
     private final AccessTokenService accessTokenService;
     private final DirectiveProcessor directiveProcessor;
 
@@ -243,12 +248,30 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
     private final Function<DataPointMessage, TlvMessage> dataPackage = (DataPointMessage message) -> {
 
         String payload = message.getPayload();
+        MultipartBody.Part part = MultipartBody.Part.createFormData(
+                "metadata",
+                null,
+                RequestBody.create(okhttp3.MediaType.parse(MediaType.APPLICATION_JSON_UTF8_VALUE), payload)
+        );
         RequestBody multipartBody = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
-                .addPart(MultipartBody.Part.createFormData("metadata", payload))
+                .addPart(part)
                 .build();
         Buffer buffer = new Buffer();
+        okhttp3.MediaType mediaType = Optional.ofNullable(multipartBody.contentType())
+                .orElseGet(() ->
+                        okhttp3.MediaType.get(
+                                MediaType.APPLICATION_PROBLEM_JSON_UTF8_VALUE
+                                        + "; boundary="
+                                        + ByteString.encodeUtf8(UUID.randomUUID().toString()).utf8()));
+        ByteString header = ByteString.encodeString(
+                String.format("%s: %s", HEADER_CONTENT_TYPE, mediaType.toString()), Charsets.UTF_8);
         try {
+            // entity header
+            buffer.write(header);
+            buffer.write(CRLF);
+            buffer.write(CRLF);
+            // body
             multipartBody.writeTo(buffer);
             long vlen = buffer.size();
             byte[] content = buffer.readByteArray();

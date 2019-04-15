@@ -60,14 +60,16 @@ public class DirectiveProcessor {
     }
 
     public List<JsonNode> process(String cuid, String sn, List<TlvMessage> messages) {
-        if (messages == null || messages.size() < 1) {
-            return Collections.emptyList();
+        if (messages != null && messages.size() > 0) {
+            processPreTTS(cuid, sn, messages);
+            Map<String, String> mapper = processFinalTTS(cuid, sn, messages);
+            List<JsonNode> metadata = processMetadata(messages);
+            if (metadata != null && metadata.size() > 0) {
+                visitMetadata(metadata, mapper);
+                return metadata;
+            }
         }
-        processPreTTS(cuid, sn, messages);
-        Map<String, String> mapper = processFinalTTS(cuid, sn, messages);
-        List<JsonNode> metadata = processMetadata(messages);
-        visitMetadata(metadata, mapper);
-        return metadata;
+        return Collections.emptyList();
     }
 
     private void processPreTTS(String cuid, String sn, List<TlvMessage> messages) {

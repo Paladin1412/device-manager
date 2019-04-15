@@ -9,6 +9,7 @@ import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
 import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,8 @@ import java.util.concurrent.CompletableFuture;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CUID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_SN;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_PRE_TTS;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_TTS;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/30.
@@ -60,8 +63,12 @@ public class TtsProxyClient extends AbstractHttpClient {
         TlvMessage tlv = message.getMessage();
         BinaryNode valueBin = tlv.getValue();
         JsonNode valueNode = JsonUtil.readTree(valueBin.binaryValue());
-        RequestBody requestBody =
-                buildRequestBody(valueNode.path(isPre ? "PRE_TTS" : "TTS"));
+        Object ttsArray = valueNode.path(isPre ? JSON_KEY_PRE_TTS : JSON_KEY_TTS);
+        Preconditions.checkArgument(
+                ttsArray instanceof ArrayNode && ((ArrayNode) ttsArray).size() > 0,
+                String.format("No tts info found: %s", String.valueOf(valueNode))
+        );
+        RequestBody requestBody = buildRequestBody(ttsArray);
 
         if (requestBody == null) {
             return null;

@@ -44,7 +44,13 @@ public class TtsService {
 
     public Map<String, String> requestTTSSync(TtsRequest message, boolean isPre) {
         Map<String, String> urlmap = new HashMap<>();
-        Response response = client.requestTtsSync(message, isPre);
+        Response response;
+        try {
+            response = client.requestTtsSync(message, isPre);
+        } catch (Exception e) {
+            log.warn(e.getMessage());
+            return urlmap;
+        }
         if (response != null && response.isSuccessful() && !isPre) {
             ResponseBody body = response.body();
             if (body != null) {
