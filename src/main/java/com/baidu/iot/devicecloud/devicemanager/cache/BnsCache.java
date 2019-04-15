@@ -1,6 +1,7 @@
 package com.baidu.iot.devicecloud.devicemanager.cache;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
+import com.google.common.base.Charsets;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -99,7 +100,8 @@ public class BnsCache {
         try {
             List<String> ipPorts = getIpPorts(bns);
 
-            String ipPort = ipPorts.get(Hashing.consistentHash(HashCode.fromBytes(key.getBytes()), ipPorts.size()));
+            HashCode hashCode = Hashing.murmur3_128().newHasher().putString(key, Charsets.UTF_8).hash();
+            String ipPort = ipPorts.get(Hashing.consistentHash(hashCode, ipPorts.size()));
             String[] items = ipPort.split(Pattern.quote(SPLITTER_COLON));
             if (items.length >= 2) {
                 log.debug("key:{} address:{}", key, Arrays.toString(items));
