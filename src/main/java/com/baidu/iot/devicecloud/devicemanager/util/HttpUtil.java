@@ -11,6 +11,7 @@ import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientPr
 import com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.fasterxml.jackson.databind.JsonNode;
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import org.springframework.http.MediaType;
@@ -40,6 +41,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_P
  *
  * @author <a href="mailto:yaogang AT baidu DOT com">Yao Gang</a>
  */
+@Slf4j
 public class HttpUtil {
     public static void close(Response response) {
         try {
@@ -55,8 +57,11 @@ public class HttpUtil {
         if (response.isSuccessful() && body != null) {
             try {
                 JsonNode resp = JsonUtil.readTree(body.bytes());
-                return resp != null && !resp.isNull() && resp.has(PAM_PARAM_STATUS)
-                        && resp.get(PAM_PARAM_STATUS).asInt(-1) == 0;
+                if (resp != null) {
+                    log.debug("Dcs responses: {}", resp.toString());
+                    return !resp.isNull() && resp.has(PAM_PARAM_STATUS)
+                            && resp.get(PAM_PARAM_STATUS).asInt(-1) == 0;
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }
