@@ -10,6 +10,7 @@ import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -81,5 +82,12 @@ public class TestPublisher {
                 .doOnNext(workQueue::onNext)
                 .doFinally(signalType -> System.out.println(signalType.toString()))
                 .subscribe(System.out::println);
+    }
+
+    @Test
+    public void testEmptyList() {
+        Flux.fromIterable(Collections.emptyList())
+                .doFinally(signalType -> System.out.println(signalType.toString()))
+                .subscribe(i -> System.out.println("received: " + i));
     }
 }
