@@ -6,7 +6,7 @@ plugins {
 apply plugin: 'io.spring.dependency-management'
 
 group = 'com.baidu.iot.devicecloud'
-version = '0.0.8-SNAPSHOT'
+version = '0.0.9-SNAPSHOT'
 sourceCompatibility = '1.8'
 
 configurations {
