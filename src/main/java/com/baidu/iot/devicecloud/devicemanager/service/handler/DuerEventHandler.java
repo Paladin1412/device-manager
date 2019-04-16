@@ -29,16 +29,18 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.pool.AbstractChannelPoolMap;
+import io.netty.channel.pool.ChannelPoolHandler;
+import io.netty.channel.pool.ChannelPoolMap;
+import io.netty.channel.pool.SimpleChannelPool;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.logging.LoggingHandler;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
@@ -76,6 +78,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.ME
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_EVENT;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_AUTHORIZATION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_DUEROS_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_LINK_VERSION;
@@ -99,6 +102,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
 
     private Channel outboundChannel;
     public Cache<String, Optional<String>> cache;
+    private ChannelPoolMap<InetSocketAddress, SimpleChannelPool> poolMap;
 
     @Value("${dcs.proxy.address.evt:}")
     private String dcsProxyEvtAddress;
@@ -115,6 +119,47 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                 .recordStats()
                 .removalListener((RemovalListener<String, Optional<String>>) n -> log.debug("Removed: ({}, {}), caused by: {}", n.getKey(), n.getValue(), n.getCause().toString()))
                 .build();
+
+
+        poolMap = new AbstractChannelPoolMap<InetSocketAddress, SimpleChannelPool>() {
+            @Override
+            protected SimpleChannelPool newPool(InetSocketAddress key) {
+                log.debug("Creating new pool for {}", key.toString());
+                return new SimpleChannelPool(
+                        new Bootstrap()
+                                .group(new NioEventLoopGroup())
+                                .channel(NioSocketChannel.class)
+                                .remoteAddress(key),
+                        new ChannelPoolHandler() {
+                            @Override
+                            public void channelReleased(Channel ch) throws Exception {
+                                log.debug("{} has been released", ch.toString());
+                            }
+
+                            @Override
+                            public void channelAcquired(Channel ch) throws Exception {
+                                log.debug("{} has been acquired", ch.toString());
+                            }
+
+                            @Override
+                            public void channelCreated(Channel ch) throws Exception {
+                                log.debug("{} has been created", ch.toString());
+                                ChannelPipeline pipeline = ch.pipeline();
+                                pipeline
+                                        // Inbounds start from below
+                                        .addLast("tlvDecoder", new TlvDecoder())
+                                        // Inbounds stop at above
+
+                                        // Outbounds stop at below
+                                        .addLast("disconnectedHandler", new DisconnectedHandler())
+                                        .addLast("tlvEncoder", new TlvEncoder("dcsProxyClient"))
+                                        // Outbounds start from above
+                                ;
+                            }
+                        }
+                );
+            }
+        };
     }
 
     @Override
@@ -146,28 +191,6 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         // all tlv messages those received from dcs
         final UnicastProcessor<TlvMessage> responseQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
         // Initializing a new connection to DCS proxy for each client connected to the relay server til the client has report the first initial package
-        Bootstrap dcsProxyClient = new Bootstrap();
-        dcsProxyClient
-                .group(new NioEventLoopGroup())
-                .channel(NioSocketChannel.class)
-                .handler(new LoggingHandler())
-                .handler(new ChannelInitializer<SocketChannel>() {
-                    @Override
-                    protected void initChannel(SocketChannel ch) throws Exception {
-                        ch.pipeline()
-                                // Inbounds start from below
-                                .addLast("tlvDecoder", new TlvDecoder())
-                                .addLast(new RelayBackendHandler(requestQueue, responseQueue))
-                                // Inbounds stop at above
-
-                                // Outbounds stop at below
-                                .addLast("disconnectedHandler", new DisconnectedHandler())
-                                .addLast("tlvEncoder", new TlvEncoder("dcsProxyClient"))
-                                // Outbounds start from above
-                        ;
-                    }
-                });
-
         log.debug("The relay server is connecting to dcs.");
         InetSocketAddress assigned;
         if (StringUtils.hasText(dcsProxyEvtAddress)) {
@@ -183,21 +206,25 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         if (assigned == null) {
             return Mono.error(new IllegalStateException("Couldn't find any dcs address"));
         }
-        ChannelFuture channelFuture = dcsProxyClient.connect(assigned);
-        outboundChannel = channelFuture.channel();
-        channelFuture.addListener((ChannelFutureListener) future -> {
-            if (future.isSuccess()) {
-                log.debug("Connection to dcs {} has succeeded.", future.channel().toString());
+        final SimpleChannelPool pool = poolMap.get(assigned);
+        Future<Channel> f = pool.acquire();
+        f.addListener((FutureListener<Channel>) channelFuture -> {
+            if (f.isSuccess()) {
+                outboundChannel = f.getNow();
+                outboundChannel.pipeline()
+                        .addLast("relayBackendHandler", new RelayBackendHandler(requestQueue, responseQueue));
                 writeAndFlush(outboundChannel, initPackage.apply(message, accessToken));
                 outboundChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
+
+                TlvMessage data = dataPackage.apply(message);
+                if (data != null) {
+                    requestQueue.onNext(data);
+                }
+                requestQueue.onNext(finishPackage.apply(message));
+                requestQueue.onComplete();
             }
         });
-        TlvMessage data = dataPackage.apply(message);
-        if (data != null) {
-            requestQueue.onNext(data);
-        }
-        requestQueue.onNext(finishPackage.apply(message));
-        requestQueue.onComplete();
+
         return Mono.from(Flux.push(fluxSink -> responseQueue.subscribe(new BaseSubscriber<TlvMessage>() {
             @Override
             protected void hookOnNext(TlvMessage value) {
@@ -213,6 +240,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                 .flatMapMany(list -> Flux.fromIterable(deal(list, message)))
                 .take(1)
                 .doOnNext(next -> accessTokenService.refreshAccessToken(message))
+                .doFinally(signalType -> pool.release(outboundChannel))
                 .switchIfEmpty(Mono.just(successResponses.get())));
     }
 
@@ -307,6 +335,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
 
     private final Supplier<DataPointMessage> successResponses = () -> {
         DataPointMessage response = new DataPointMessage();
+        response.setVersion(DEFAULT_VERSION);
         response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID);
         response.setId(IdGenerator.nextId());
         return response;
@@ -314,6 +343,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
 
     private final Function<DataPointMessage, DataPointMessage> failedResponses = (origin) -> {
         DataPointMessage response = new DataPointMessage();
+        response.setVersion(DEFAULT_VERSION);
         response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED);
         response.setId(origin.getId());
         response.setPath(DataPointConstant.DATA_POINT_PRIVATE_ERROR);
