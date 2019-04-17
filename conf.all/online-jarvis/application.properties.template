@@ -1,0 +1,28 @@
+server.port=$EM_PORT
+dm.tcp.port=$tcp
+#di.api=http://api-iot.baidu-int.com/for-di
+#di.api=http://127.0.0.1:8998
+di.bns=
+di.api=10.117.139.21:8301
+
+# dproxy sandbox
+dproxy.bns=baidu-duer-bdrp-proxy-sandbox.nlp.nj03
+dproxy.api=10.194.62.45:8123
+
+# dcs proxy
+dcs.proxy.bns=dumi-connect-controller-sandbox-prev-5035.orp.all
+dcs.proxy.api=10.173.51.160:8260
+dcs.proxy.address.state=
+dcs.proxy.address.asr=
+dcs.proxy.address.evt=
+
+tts.proxy.api=10.117.80.48:8997
+#tts.proxy.api=127.0.0.1:8099
+
+dh.bns=
+dh.api=10.211.245.46:8205
+
+local.server.port=
+local.server.bns=
+
+logging.config=$EM_APP_HOME/conf/logback.xml

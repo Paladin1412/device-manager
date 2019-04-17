@@ -1,6 +1,7 @@
 HELP.md
 .gradle
 /build/
+/scripts/
 
 ### STS ###
 .apt_generated
@@ -16,6 +17,7 @@ HELP.md
 *.iws
 *.ipr
 /out/
+/output/
 
 ### NetBeans ###
 /nbproject/private/

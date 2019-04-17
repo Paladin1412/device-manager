@@ -1,0 +1,12 @@
+Global:
+  tool: build_submitter
+
+Default:
+  profile: [jarvis]
+
+Profiles:
+  - profile:
+    name: jarvis
+    env: IOT-DUER
+    command: sh build-archer3.sh
+    release: true

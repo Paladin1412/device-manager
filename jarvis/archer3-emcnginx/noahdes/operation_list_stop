@@ -1,0 +1,8 @@
+---
+PREPARE:
+    - EXECUTE_CMD:echo "start to execute"   #自定义命令
+    - EXECUTE_CMD:/usr/bin/montool -b $MATRIX_CONTAINER_ID --token 9LXS8edivVtYq9QOs1oA06mn13DgpWER #屏蔽监控
+MAIN:
+    - CALL_CONTROL:stop                     #停服务
+END:
+    - EXECUTE_CMD:echo "end of execute"     #自定义命令

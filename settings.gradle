@@ -4,3 +4,7 @@ pluginManagement {
 	}
 }
 rootProject.name = 'devicecloud-device-manager'
+
+gradle.allprojects {
+	it.apply from: new File(rootDir, 'bootstrap.gradle')
+}

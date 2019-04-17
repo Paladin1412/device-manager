@@ -1,12 +1,14 @@
 plugins {
 	id 'org.springframework.boot' version '2.1.3.RELEASE'
 	id 'java'
+	id 'application'
 }
 
 apply plugin: 'io.spring.dependency-management'
+apply plugin: 'output'
+apply plugin: 'base-settings'
 
 group = 'com.baidu.iot.devicecloud'
-version = '0.0.9-SNAPSHOT'
 sourceCompatibility = '1.8'
 
 configurations {
@@ -15,16 +17,12 @@ configurations {
 	}
 }
 
-repositories {
-	mavenCentral()
-}
-
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-actuator'
-	implementation 'org.springframework.boot:spring-boot-starter-cache'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-webflux'
-	implementation 'org.springframework.retry:spring-retry'
+    compile 'org.springframework.boot:spring-boot-starter-actuator'
+    compile 'org.springframework.boot:spring-boot-starter-cache'
+    compile 'org.springframework.boot:spring-boot-starter-validation'
+    compile 'org.springframework.boot:spring-boot-starter-webflux'
+    compile 'org.springframework.retry:spring-retry'
 	// https://mvnrepository.com/artifact/com.google.guava/guava
 	compile group: 'com.google.guava', name: 'guava', version: '27.0.1-jre'
 	// https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp
@@ -40,3 +38,19 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'io.projectreactor:reactor-test'
 }
+
+application {
+    applicationName = 'devicecloud-device-manager'
+    mainClassName = 'com.baidu.iot.devicecloud.devicemanager.DeviceManagerApplication'
+    applicationDefaultJvmArgs += ["-Dservice.name=${applicationName}", "-XX:+UseConcMarkSweepGC" ,
+                       "-XX:+CMSParallelRemarkEnabled","-XX:CMSInitiatingOccupancyFraction=60",
+                       "-XX:+UseCMSInitiatingOccupancyOnly", "-Xmx8g", "-Xms8g", "-Xmn3g", "-Xss256k",
+                       "-XX:SurvivorRatio=2", "-XX:MetaspaceSize=256m", "-XX:MaxTenuringThreshold=15",
+                       "-XX:+UseCMSCompactAtFullCollection","-XX:CMSFullGCsBeforeCompaction=10",
+                       "-XX:+CMSScavengeBeforeRemark","-XX:+ScavengeBeforeFullGC","-XX:+DisableExplicitGC",
+                       "-XX:ParallelGCThreads=20"]
+}
+output.thisProject = true
+jar.enabled = true
+bootJar.enabled = false
+defaultTasks 'clean', 'output'

@@ -1,0 +1,8 @@
+project.buildscript {
+    repositories {
+        maven { url 'http://maven.scm.baidu.com:8081/nexus/content/groups/public/' }
+    }
+    dependencies {
+        classpath "com.baidu.bae:gradle-plugins:2.0.8350.198"
+    }
+}

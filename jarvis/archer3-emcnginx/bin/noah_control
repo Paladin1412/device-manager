@@ -1,0 +1,63 @@
+#!/bin/bash
+
+APP_DIR=$EM_APP_HOME
+timestamp=`date +%s`
+starting="${APP_DIR}/starting"
+
+cd $APP_DIR
+
+# bin
+chmod +x ${APP_DIR}/bin/*
+
+envsubst '$EM_APP_HOME $EM_PORT $tcp'< ${APP_DIR}/conf/application.properties.template > ${APP_DIR}/conf/application.properties
+
+function start() {
+    echo ${timestamp} >> $starting
+
+    ./bin/dm_control start
+}
+
+function stop() {
+    ./bin/dm_control stop
+}
+
+function restart() {
+    ./bin/dm_control restart
+}
+
+function status() {
+	./bin/status.sh start
+}
+
+ACTION=$1
+case "${ACTION}" in
+    start)
+        echo "Starting ..."
+        start
+        RETVAL=$?
+        echo "Started"
+    ;;
+    stop)
+        echo "Stoping..."
+        stop
+        RETVAL=$?
+        echo "Stopped"
+    ;;
+    restart)
+        echo "Restarting..."
+        restart
+        RETVAL=$?
+        echo "Restarted"
+    ;;
+    status)
+        echo "Getting status..."
+		status
+		RETVAL=$?
+        echo "Finished getting status"
+    ;;
+    *)
+        echo "Usage: bin/noah_contorl start/stop/restart/status"
+        exit 1
+    ;;
+esac
+exit ${RETVAL}

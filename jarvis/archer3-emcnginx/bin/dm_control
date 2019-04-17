@@ -1,0 +1,37 @@
+#!/bin/bash
+. $(dirname $(dirname $(readlink -f $0)))/conf/env.conf
+
+APP=${APP_DIR}/bin/devicecloud-device-manager
+
+function start(){
+    echo "start ..."
+    nohup ${APP} >/dev/null 2>${DEVICE_MANAGER_LOG} &
+}
+
+function stop(){
+    echo "stop ..."
+    ps -ef | grep devicecloud-device-manager.jar | grep -v grep | awk '{print $2}' | xargs kill -9
+}
+
+case C"$1" in
+    C)
+        echo "Usage: $0 {start|stop|restart}"
+        ;;
+    Cstart)
+        start
+        echo "Done!"
+        ;;
+    Cstop)
+        stop
+        echo "Done!"
+        ;;
+    Crestart)
+        stop
+        sleep 3s
+        start
+        echo "Done!"
+        ;;
+    C*)
+        echo "Usage: $0 {start|stop|restart}"
+        ;;
+esac
