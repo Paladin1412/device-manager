@@ -24,10 +24,12 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.baidu.iot.devicecloud.devicemanager.adapter.Adapter.try2appendDialogueFinished;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_DELETE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_EMPTY;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_PUT;
@@ -121,6 +123,13 @@ public class PushHandler {
                                                      List<Integer> idList,
                                                      String key,
                                                      BaseMessage origin) {
+        if (directives == null || directives.size() < 1 || origin == null) {
+            return Collections.emptyList();
+        }
+
+        // try to append DialogueFinished
+        try2appendDialogueFinished(directives);
+
         return directives.stream()
                 .map(jsonNode -> {
                     int id = IdGenerator.nextId();

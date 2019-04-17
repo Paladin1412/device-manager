@@ -1,9 +1,5 @@
 package com.baidu.iot.devicecloud.devicemanager.constant;
 
-import com.fasterxml.jackson.databind.JsonNode;
-
-import java.util.function.Predicate;
-
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/4.
  *
@@ -101,13 +97,4 @@ public class DCSProxyConstant {
     // env
     public static final int ASR_PORT_OFFSET = 8;
     public static final int EVENT_PORT_OFFSET = 7;
-
-    public static Predicate<JsonNode> isSpeakDirective =
-            (JsonNode directive) -> {
-                JsonNode header = directive.get(DIRECTIVE_KEY_HEADER);
-                return header != null
-                        && !header.isNull()
-                        && header.has(DIRECTIVE_KEY_HEADER_NAME)
-                        && COMMAND_SPEAK.equalsIgnoreCase(header.get(DIRECTIVE_KEY_HEADER_NAME).asText());
-            };
 }

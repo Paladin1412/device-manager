@@ -39,6 +39,12 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HE
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_EQUALITY_SIGN;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_SEMICOLON;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.COMMAND_SPEAK;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DIRECTIVE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_NAME;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_PAYLOAD;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_PAYLOAD_URL;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getBoundary;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.isDirectiveTlv;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.isPreTTSTlv;
@@ -219,19 +225,30 @@ public class DirectiveProcessor {
     }
 
     private Predicate<JsonNode> isSpeak =
-            node -> "Speak".equalsIgnoreCase(node.path("directive").path("header").path("name").asText());
+            node ->
+                    COMMAND_SPEAK.equalsIgnoreCase(node
+                            .path(DIRECTIVE_KEY_DIRECTIVE)
+                            .path(DIRECTIVE_KEY_HEADER)
+                            .path(DIRECTIVE_KEY_HEADER_NAME).asText());
 
     private Predicate<JsonNode> needRewrite =
             node -> StringUtils.startsWithIgnoreCase(
-                    node.path("directive").path("payload").path("url").asText(),
+                    node
+                            .path(DIRECTIVE_KEY_DIRECTIVE)
+                            .path(DIRECTIVE_KEY_PAYLOAD)
+                            .path(DIRECTIVE_KEY_PAYLOAD_URL).asText(),
                     "cid:"
             );
 
     private Function<JsonNode, String> getContentId =
             node -> {
-                String contentId = node.path("directive").path("payload").path("url").asText();
-                if (StringUtils.hasText(contentId)) {
-                    String[] items = StringUtils.split(contentId, SPLITTER_COLON);
+                String url = node
+                        .path(DIRECTIVE_KEY_DIRECTIVE)
+                        .path(DIRECTIVE_KEY_PAYLOAD)
+                        .path(DIRECTIVE_KEY_PAYLOAD_URL)
+                        .asText();
+                if (StringUtils.hasText(url)) {
+                    String[] items = StringUtils.split(url, SPLITTER_COLON);
                     if (items!= null && items.length > 1) {
                         return items[1];
                     }
@@ -244,10 +261,10 @@ public class DirectiveProcessor {
                 if (StringUtils.isEmpty(url)) {
                     return;
                 }
-                JsonNode payloadNode = node.path("directive").path("payload");
+                JsonNode payloadNode = node.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_PAYLOAD);
                 if (payloadNode != null && payloadNode.isObject()) {
                     ObjectNode payload = (ObjectNode) payloadNode;
-                    payload.set("url", TextNode.valueOf(url));
+                    payload.set(DIRECTIVE_KEY_PAYLOAD_URL, TextNode.valueOf(url));
                 }
             };
 }

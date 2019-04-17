@@ -13,4 +13,8 @@ public class DataPointConstant {
 
     public static final String DATA_POINT_DUER_DIRECTIVE = "duer_directive";
     public static final String DATA_POINT_DUER_EVENT = "duer_event";
+
+    // Private
+    public static final String PRIVATE_PROTOCOL_NAMESPACE = "ai.dueros.private.protocol";
+    public static final String PRIVATE_PROTOCOL_DIALOGUE_FINISHED = "DialogueFinished";
 }

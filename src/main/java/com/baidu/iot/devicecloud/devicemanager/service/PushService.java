@@ -46,6 +46,12 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DIRECTIVE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_DIALOG_ID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_MESSAGE_ID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_PAYLOAD;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_PAYLOAD_URL;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isCoapOk;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponses;
@@ -201,7 +207,7 @@ public class PushService implements InitializingBean {
         Map<String, Part> partMap = partMap(audios);
         return metadataJson.stream()
                 .map(jsonNode -> {
-                    JsonNode payloadJsonNode = jsonNode.path("directive").path("payload");
+                    JsonNode payloadJsonNode = jsonNode.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_PAYLOAD);
                     ObjectNode payloadNode = null;
                     if (payloadJsonNode != null) {
                         if (payloadJsonNode.isObject()) {
@@ -214,11 +220,16 @@ public class PushService implements InitializingBean {
                         return jsonNode;
                     }
                     ObjectNode finalPayloadNode = payloadNode;
-                    String url = jsonNode.path("directive").path("payload").path("url").asText();
+                    String url = jsonNode
+                            .path(DIRECTIVE_KEY_DIRECTIVE)
+                            .path(DIRECTIVE_KEY_PAYLOAD)
+                            .path(DIRECTIVE_KEY_PAYLOAD_URL)
+                            .asText();
                     if (StringUtils.hasText(url) && StringUtils.startsWithIgnoreCase(url,"cid:")) {
                         String cid = url.split(Pattern.quote(SPLITTER_COLON))[1];
-                        String dialogRequestId = jsonNode.path("directive").path("header").path("dialogRequestId").asText();
-                        String messageId = jsonNode.path("directive").path("header").path("dialogRequestId").path("messageId").asText();
+                        JsonNode header = jsonNode.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_HEADER);
+                        String dialogRequestId = header.path(DIRECTIVE_KEY_HEADER_DIALOG_ID).asText();
+                        String messageId = header.path(DIRECTIVE_KEY_HEADER_MESSAGE_ID).asText();
                         String audioKey = DigestUtils.md5Hex(String.format("%s_%s_%s", dialogRequestId, messageId, cid));
                         Part desired = partMap.get(cid);
                         if (desired != null) {
@@ -232,8 +243,10 @@ public class PushService implements InitializingBean {
                                     .subscribe(in -> {
                                         cacheAudio(audioKey, in);
                                         String ttsProxyUrl = ttsProxyClient.getTTSProxyURL();
-                                        String finalUrl = StringUtils.applyRelativePath(PathUtil.lookAfterSuffix(ttsProxyUrl), audioKey);
-                                        finalPayloadNode.set("url", TextNode.valueOf(finalUrl));
+                                        String finalUrl =
+                                                StringUtils.applyRelativePath(
+                                                        PathUtil.lookAfterSuffix(ttsProxyUrl), audioKey);
+                                        finalPayloadNode.set(DIRECTIVE_KEY_PAYLOAD_URL, TextNode.valueOf(finalUrl));
                                     });
                         }
                     }

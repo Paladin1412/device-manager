@@ -19,7 +19,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DIRECTIVE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_DIALOG_ID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_MESSAGE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.PRIVATE_PROTOCOL_DIALOGUE_FINISHED;
+import static com.baidu.iot.devicecloud.devicemanager.util.DirectiveUtil.assembleDuerPrivateDirective;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isLegalType;
 
 /**
@@ -62,9 +68,12 @@ public class Adapter {
     }
 
     public static List<TlvMessage> directive2DataPointTLV(List<JsonNode> directives, int type) {
-        if (directives == null || !isLegalType(type)) {
+        if (directives == null || directives.size() < 1 || !isLegalType(type)) {
             return Collections.emptyList();
         }
+
+        // try to append DialogueFinished
+        try2appendDialogueFinished(directives);
 
         return directives
                 .stream()
@@ -85,9 +94,12 @@ public class Adapter {
                 .collect(Collectors.toList());
     }
     public static List<DataPointMessage> directive2DataPoint(List<JsonNode> directives, DataPointMessage origin) {
-        if (directives == null || origin == null) {
+        if (directives == null || directives.size() < 1 || origin == null) {
             return Collections.emptyList();
         }
+
+        // try to append DialogueFinished
+        try2appendDialogueFinished(directives);
 
         return directives
                 .stream()
@@ -105,4 +117,23 @@ public class Adapter {
         return assembled;
     }
 
+    public static void try2appendDialogueFinished(List<JsonNode> directives) {
+        try {
+            // obtain dialogueRequestId from first directive
+            JsonNode first = directives.get(0);
+            JsonNode header = first.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_HEADER);
+            String dialogueRequestId = header.path(DIRECTIVE_KEY_HEADER_DIALOG_ID).asText();
+            if (StringUtils.hasText(dialogueRequestId)) {
+                directives.add(assembleDuerPrivateDirective(
+                        PRIVATE_PROTOCOL_DIALOGUE_FINISHED,
+                        dialogueRequestId,
+                        header.path(DIRECTIVE_KEY_HEADER_MESSAGE_ID).asText(),
+                        directives.size() + 1
+                ));
+            }
+        } catch (Exception e) {
+            log.error("Trying to append DialogueFinished at last failed: {}", e.getMessage());
+            e.printStackTrace();
+        }
+    }
 }
