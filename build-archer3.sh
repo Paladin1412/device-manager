@@ -1,6 +1,7 @@
 #!/bin/bash
 
 APP_NAME=devicecloud-device-manager
+JARVIS_NAME=devicecloud-devicemanager
 
 export JAVA_HOME=/home/work/local/setup/jdk1.8.0_181
 export PATH=${JAVA_HOME}/bin:${PATH}
@@ -25,8 +26,8 @@ rm -rf output.src/bin.src/
 
 cd output.src
 
-tar zcf ../output/${APP_NAME}.tar.gz *
-if [[ ! -f "../output/${APP_NAME}.tar.gz" ]]; then
+tar zcf ../output/${JARVIS_NAME}.tar.gz *
+if [[ ! -f "../output/${JARVIS_NAME}.tar.gz" ]]; then
     echo "compiler fail!"
     exit 1
 fi
