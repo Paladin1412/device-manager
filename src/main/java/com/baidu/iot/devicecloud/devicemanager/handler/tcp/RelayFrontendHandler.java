@@ -5,6 +5,7 @@ import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenResponse;
 import com.baidu.iot.devicecloud.devicemanager.codec.TlvDecoder;
 import com.baidu.iot.devicecloud.devicemanager.codec.TlvEncoder;
+import com.baidu.iot.devicecloud.devicemanager.config.localserver.TcpRelayServerConfig;
 import com.baidu.iot.devicecloud.devicemanager.constant.ConfirmationStates;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
@@ -37,7 +38,6 @@ import java.net.InetSocketAddress;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-import static com.baidu.iot.devicecloud.devicemanager.config.localserver.TcpRelayServerConfig.DM_TCP_TIMEOUT_IDLE_READ;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_DUEROS_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_PARAM;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_SN;
@@ -69,6 +69,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
     private final AccessTokenService accessTokenService;
     private final DirectiveProcessor directiveProcessor;
     private final InetSocketAddress assignedAsrAddress;
+    private final TcpRelayServerConfig config;
 
     private final UnicastProcessor<TlvMessage> workQueue;
 
@@ -77,11 +78,15 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
     private String cuid;
     private String sn;
 
-    public RelayFrontendHandler(AccessTokenService accessTokenService, DirectiveProcessor directiveProcessor, InetSocketAddress assignedAsrAddress) {
+    public RelayFrontendHandler(AccessTokenService accessTokenService,
+                                DirectiveProcessor directiveProcessor,
+                                InetSocketAddress assignedAsrAddress,
+                                TcpRelayServerConfig config) {
         super();
         this.accessTokenService = accessTokenService;
         this.directiveProcessor = directiveProcessor;
         this.assignedAsrAddress = assignedAsrAddress;
+        this.config = config;
 
         // here shouldn't be so many messages, so use xs().
         this.workQueue =
@@ -124,7 +129,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                             ch.pipeline()
                                     // Inbounds start from below
                                     .addLast("tlvDecoder", new TlvDecoder())
-                                    .addLast("idleStateHandler", new IdleStateHandler(DM_TCP_TIMEOUT_IDLE_READ, 0, 0))
+                                    .addLast("idleStateHandler", new IdleStateHandler(config.dmTcpTimeoutIdle, 0, 0))
                                     .addLast(new RelayBackendHandler(inboundChannel, workQueue, directiveProcessor))
                                     // Inbounds stop at above
 

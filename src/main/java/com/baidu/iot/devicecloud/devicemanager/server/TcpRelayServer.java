@@ -32,7 +32,6 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.regex.Pattern;
 
-import static com.baidu.iot.devicecloud.devicemanager.config.localserver.TcpRelayServerConfig.DM_TCP_TIMEOUT_IDLE_READ;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
 
 /**
@@ -67,6 +66,7 @@ public class TcpRelayServer {
     public static final AttributeKey<String> SN = AttributeKey.valueOf("sn");
     private final AccessTokenService accessTokenService;
     private final DirectiveProcessor directiveProcessor;
+    private final TcpRelayServerConfig config;
 
     private ChannelFuture channelFuture;
 
@@ -77,16 +77,19 @@ public class TcpRelayServer {
     private String dcsProxyAsrAddress;
 
     @Autowired
-    public TcpRelayServer(AccessTokenService accessTokenService, DirectiveProcessor directiveProcessor) {
+    public TcpRelayServer(AccessTokenService accessTokenService,
+                          DirectiveProcessor directiveProcessor,
+                          TcpRelayServerConfig config) {
         this.accessTokenService = accessTokenService;
         this.directiveProcessor = directiveProcessor;
+        this.config = config;
     }
 
     @PostConstruct
     public void start() {
         bossGroup = new NioEventLoopGroup();
         workerGroup = new NioEventLoopGroup();
-        InetSocketAddress inetSocketAddress = new InetSocketAddress(TcpRelayServerConfig.DM_TCP_PORT);
+        InetSocketAddress inetSocketAddress = new InetSocketAddress(config.dmTcpPort);
         InetSocketAddress tryDcsProxyAsr = null;
         if (StringUtils.hasText(dcsProxyAsrAddress)) {
             String[] items = dcsProxyAsrAddress.split(Pattern.quote(SPLITTER_COLON));
@@ -109,8 +112,8 @@ public class TcpRelayServer {
                     protected void initChannel(SocketChannel ch) throws Exception {
                         ch.pipeline()
                                 .addLast("tlvDecoder", new TlvDecoder())
-                                .addLast("idleStateHandler", new IdleStateHandler(DM_TCP_TIMEOUT_IDLE_READ, 0, 0))
-                                .addLast("relayHandler", new RelayFrontendHandler(accessTokenService, directiveProcessor, dcsProxyAsr))
+                                .addLast("idleStateHandler", new IdleStateHandler(config.dmTcpTimeoutIdle, 0, 0))
+                                .addLast("relayHandler", new RelayFrontendHandler(accessTokenService, directiveProcessor, dcsProxyAsr, config))
 
                                 .addLast("tlvEncoder", new TlvEncoder("Relay server"));
                     }
