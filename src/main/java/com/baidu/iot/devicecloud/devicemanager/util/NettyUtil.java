@@ -73,4 +73,5 @@ public class NettyUtil {
     public static Predicate<TlvMessage> isDirectiveTlv = (TlvMessage tlv) -> tlv.getType() == TlvConstant.TYPE_DOWNSTREAM_DUMI;
     public static Predicate<TlvMessage> isTTSTlv = (TlvMessage tlv) -> tlv.getType() == TlvConstant.TYPE_DOWNSTREAM_TTS;
     public static Predicate<TlvMessage> isPreTTSTlv = (TlvMessage tlv) -> tlv.getType() == TlvConstant.TYPE_DOWNSTREAM_PRE_TTS;
+    public static Predicate<TlvMessage> isDownStreamFinishTlv = (TlvMessage tlv) -> tlv.getType() == TlvConstant.TYPE_DOWNSTREAM_FINISH;
 }

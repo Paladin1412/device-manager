@@ -16,10 +16,13 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
 
+import java.util.stream.Stream;
+
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CUID;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.SN;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.closeOnFlush;
+import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.isDownStreamFinishTlv;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlush;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.confirmedConnection;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isDownstreamFinishPackage;
@@ -74,10 +77,13 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
                 log.debug("{} has been confirmed by dcs. Subscribing to asr", upstreamChannel.toString());
                 workQueue.collectList()
                         .flatMapMany(list -> Flux.fromStream(
-                                Adapter.directive2DataPointTLV(
-                                        directiveProcessor.process(this.cuid, this.sn, list),
-                                        TlvConstant.TYPE_DOWNSTREAM_DUMI
-                                ).stream()
+                                Stream.concat(
+                                        Adapter.directive2DataPointTLV(
+                                                directiveProcessor.process(this.cuid, this.sn, list),
+                                                TlvConstant.TYPE_DOWNSTREAM_DUMI
+                                        ).stream(),
+                                        list.stream().filter(isDownStreamFinishTlv)
+                                )
                         ))
                         .subscribe(NettyUtil.good2Go(downstreamChannel).<TlvMessage>get());
 
