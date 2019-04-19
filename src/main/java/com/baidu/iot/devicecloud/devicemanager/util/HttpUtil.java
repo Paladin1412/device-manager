@@ -53,6 +53,9 @@ public class HttpUtil {
     }
 
     public static Predicate<Response> isDcsOk = response -> {
+        if (response == null) {
+            return false;
+        }
         ResponseBody body = response.body();
         if (response.isSuccessful() && body != null) {
             try {

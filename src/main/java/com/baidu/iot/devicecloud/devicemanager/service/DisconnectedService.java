@@ -52,8 +52,8 @@ public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMess
                         type == MessageType.SYS_DISCONNECTED ? USER_STATE_DISCONNECTED : USER_STATE_EXCEPTION);
                 if (response != null) {
                     releaseResource(response, message);
-                    sink.success(dependentResponse.apply(message, response));
                 }
+                sink.success(dependentResponse.apply(message, response));
             } catch (Exception e) {
                 e.printStackTrace();
                 sink.error(e);
