@@ -12,7 +12,7 @@ bash ./gradlew
 mv output output.src
 mkdir -p output/
 mkdir -p output.src/conf/
-cp -rf conf.all/online-jarvis/* output.src/conf/
+cp -rf conf.all/$1/* output.src/conf/
 
 mv output.src/bin output.src/bin.src/
 

@@ -8,5 +8,5 @@ Profiles:
   - profile:
     name: jarvis
     env: IOT-DUER
-    command: sh build-archer3.sh
+    command: sh build-archer3.sh ${BUILD_ENV}
     release: true
