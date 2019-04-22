@@ -54,7 +54,6 @@ public class LocalServerInfo implements InitializingBean {
     }
 
     private String autoChooseEthernet() {
-        log.info("Physical network adaptor list:");
         try {
             Enumeration<NetworkInterface> nis = NetworkInterface.getNetworkInterfaces();
             log.info("Physical network adaptor list:");
