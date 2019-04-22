@@ -53,6 +53,26 @@ public class LocalServerInfo implements InitializingBean {
         throw new RuntimeException("No valid IP address for specified network interface.");
     }
 
+    private String autoChooseEthernet() {
+        log.info("Physical network adaptor list:");
+        try {
+            Enumeration<NetworkInterface> nis = NetworkInterface.getNetworkInterfaces();
+            log.info("Physical network adaptor list:");
+            while (nis.hasMoreElements()) {
+                NetworkInterface nif = nis.nextElement();
+                log.info("interface: {}", nif);
+                if (nif.isLoopback()) {
+                    continue;
+                }
+                if (nif.isUp() && !nif.isVirtual() && StringUtils.hasText(new String(nif.getHardwareAddress()))) {
+                    return nif.getName();
+                }
+            }
+        } catch (SocketException ignore) {
+        }
+        return null;
+    }
+
     @Override
     public String toString() {
         if (StringUtils.hasText(localServerBns)) {
@@ -64,15 +84,10 @@ public class LocalServerInfo implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() throws Exception {
-        Enumeration<NetworkInterface> nis = NetworkInterface.getNetworkInterfaces();
-        log.info("Physical network adaptor list:");
-        while (nis.hasMoreElements())
-            log.info("interface: {}", nis.nextElement());
-
-        if (tcpInterface != null) {
-            String ip = getIpByInterface(tcpInterface);
-            log.info("Choose network interface={} ip={}", tcpInterface, ip);
-            this.localServerIp = ip;
-        }
+        String tryNif = autoChooseEthernet();
+        tcpInterface = StringUtils.hasText(tryNif) ? tryNif : tcpInterface;
+        String ip = getIpByInterface(tcpInterface);
+        log.info("Choose network interface={} ip={}", tcpInterface, ip);
+        this.localServerIp = ip;
     }
 }
