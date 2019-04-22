@@ -53,8 +53,8 @@ public class TlvMessage {
     public String toString() {
         return this.getClass().getSimpleName() +
                 "(" +
-                String.format("type=%d", type) +
-                String.format(" length=%d", length) +
+                String.format("type=%d,", type) +
+                String.format(" length=%d,", length) +
                 String.format(" value=%s", value == null ? "null" : UTF_8.decode(ByteBuffer.wrap(value.binaryValue()))) +
                 ")";
     }
