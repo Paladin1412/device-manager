@@ -18,7 +18,6 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.USER_STATE_EXCEPTION;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deleteTokenFromRedis;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.dependentResponse;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getTokenFromRedis;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/20.
@@ -29,10 +28,12 @@ import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getTokenFrom
 @Component
 public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMessage> {
     private final DcsProxyClient dcsProxyClient;
+    private final AccessTokenService accessTokenService;
 
     @Autowired
-    public DisconnectedService(DcsProxyClient dcsProxyClient) {
+    public DisconnectedService(DcsProxyClient dcsProxyClient, AccessTokenService accessTokenService) {
         this.dcsProxyClient = dcsProxyClient;
+        this.accessTokenService = accessTokenService;
     }
 
     @Override
@@ -68,7 +69,7 @@ public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMess
     private Response informDcsProxy(BaseMessage message, String stateName) {
         String cuid = message.getDeviceId();
         log.debug("Getting access token from dproxy for cuid:{}", cuid);
-        AccessTokenResponse response = getTokenFromRedis(cuid);
+        AccessTokenResponse response = accessTokenService.try2ObtainAccessToken(message);
         if (response != null && StringUtils.hasText(response.getAccessToken())) {
             return dcsProxyClient.adviceUserState(message,
                     response.getAccessToken(), stateName);
