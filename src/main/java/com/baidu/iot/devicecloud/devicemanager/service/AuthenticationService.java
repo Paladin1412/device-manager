@@ -38,6 +38,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_ALIVE_INTERVAL;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_PRIVATE_ERROR;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isDcsOk;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.projectExist;
 
@@ -116,7 +117,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
     }
 
     private Optional<DeviceResource> auth(final AuthorizationMessage message) {
-        String key = message.getDeviceId();
+        String key = String.format("%s_%s_%s", message.getUuid(), message.getCuid(), message.getToken());
 
         try {
             return authCache.get(key, () -> {
@@ -169,6 +170,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
 
     private final Supplier<DataPointMessage> failedResponses = () -> {
         DataPointMessage response = new DataPointMessage();
+        response.setVersion(DEFAULT_VERSION);
         response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED);
         response.setId(IdGenerator.nextId());
         response.setPath(PathUtil.lookAfterPrefix(DATA_POINT_PRIVATE_ERROR));
