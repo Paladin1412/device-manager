@@ -93,7 +93,6 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
         msg.setBns(localServerInfo.toString());
 
         Mono mono = Mono.justOrEmpty(auth(msg))
-                .log()
                 .filter(deviceResource -> deviceResource != null && StringUtils.hasText(deviceResource.getAccessToken()))
                 .doOnNext(this::writeProjectInfoToDproxy)
                 .flatMap(deviceResource -> {

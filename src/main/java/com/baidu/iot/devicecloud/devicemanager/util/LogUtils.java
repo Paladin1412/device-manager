@@ -2,6 +2,8 @@ package com.baidu.iot.devicecloud.devicemanager.util;
 
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
+import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import org.slf4j.Logger;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -30,8 +32,8 @@ public class LogUtils {
             MediaType.TEXT_XML);
 
     @SuppressWarnings("unchecked")
-    public static <T extends DataBuffer> T loggingRequest(Logger log, T buffer) {
-        return logging(log, ">>>>>>>>>>", buffer);
+    public static <T extends DataBuffer> void loggingRequest(Logger log, T buffer) {
+        logging(log, ">>>>>>>>>>", buffer);
     }
 
     public static <T extends DataBuffer> T loggingResponse(Logger log, T buffer) {
@@ -45,7 +47,7 @@ public class LogUtils {
             NettyDataBufferFactory nettyDataBufferFactory = new NettyDataBufferFactory(new UnpooledByteBufAllocator(false));
             if (log.isDebugEnabled()) {
                 log.debug("\n" +
-                        "{}Payload    : {}", inOrOut, new String(bytes));
+                        "{}Payload    : \n{}", inOrOut, ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(bytes)));
             }
             DataBufferUtils.release(buffer);
             return (T) nettyDataBufferFactory.wrap(bytes);
