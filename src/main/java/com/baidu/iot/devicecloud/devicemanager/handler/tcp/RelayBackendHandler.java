@@ -109,8 +109,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
             workQueue.onNext(msg);
 
             if (isDownstreamFinishPackage(msg)) {
-                log.debug("The downstream finish package(0xF004) has come, {}, completing the work queue",
-                        msg.toString());
+                log.debug("The downstream finish package(0xF004) has come, completing the work queue");
                 workQueue.onComplete();
             }
             return;

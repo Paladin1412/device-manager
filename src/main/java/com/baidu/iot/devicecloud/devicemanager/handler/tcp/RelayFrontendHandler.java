@@ -171,13 +171,11 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
 
         // all messages arrived after 0x0001 will enqueue
         if (initialPackageHasArrived) {
-            log.debug("The upstream init package(0x0001) has already showed up, the message {} would join the work queue",
-                    msg.toString());
+            log.debug("The upstream init package(0x0001) has already showed up, the message would join the work queue");
             workQueue.onNext(msg);
 
             if (isUpstreamFinishPackage(msg)) {
-                log.debug("The upstream finish package(0x0004) has come, {}, completing the work queue",
-                        msg.toString());
+                log.debug("The upstream finish package(0x0004) has come, completing the work queue");
                 workQueue.onComplete();
             }
             return;

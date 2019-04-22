@@ -66,8 +66,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
         if (initialPackageHasArrived) {
 
             if (isDownstreamFinishPackage(msg)) {
-                log.debug("The downstream finish package(0xF005) has come, {}, completing the work queue",
-                        msg.toString());
+                log.debug("The downstream finish package(0xF005) has come, completing the work queue");
                 responseQueue.onComplete();
                 // closing this tcp connection to dcs
                 if (upstreamChannel.isActive()) {
