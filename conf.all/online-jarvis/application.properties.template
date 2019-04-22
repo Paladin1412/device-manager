@@ -1,5 +1,5 @@
 server.port=$EM_PORT
-local.network.interface=eth0
+local.network.interface=xgbe0
 dm.tcp.port=$tcp
 #di.api=http://api-iot.baidu-int.com/for-di
 #di.api=http://127.0.0.1:8998
