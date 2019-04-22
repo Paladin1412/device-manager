@@ -108,7 +108,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) throws Exception {
-        log.debug("The relay server has read a message: {}", msg.toString());
+        log.debug("The asr-link relay server has read a message: {}", String.valueOf(msg));
 
         // server is expecting the first initial package: 0x0001
         // everything arrived before the first initial package will be ignored

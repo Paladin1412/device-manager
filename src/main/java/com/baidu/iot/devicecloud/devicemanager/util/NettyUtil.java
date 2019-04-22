@@ -14,6 +14,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
+import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.prettyLogString;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/12.
@@ -43,7 +44,14 @@ public class NettyUtil {
                                     future.cause());
                             future.cause().printStackTrace();
                         }
-                        log.debug("Writing and flushing message {} to {} successfully.", String.valueOf(msg), String.valueOf(channel));
+
+                        String msgLog;
+                        if (msg instanceof TlvMessage) {
+                            msgLog = prettyLogString.apply((TlvMessage) msg);
+                        } else {
+                            msgLog = String.valueOf(msg);
+                        }
+                        log.debug("Writing and flushing message \n{}\nto {} successfully.", msgLog, String.valueOf(channel));
                     }, ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
         }
     }

@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.node.BinaryNode;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.ByteBuffer;
+
+import static com.google.common.base.Charsets.UTF_8;
+
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/4.
  *
@@ -43,5 +47,15 @@ public class TlvMessage {
             throw new IllegalArgumentException("Content's length illegal.");
         }
         return BinaryNode.valueOf(content);
+    }
+
+    @Override
+    public String toString() {
+        return this.getClass().getSimpleName() +
+                "(" +
+                String.format("type=%d", type) +
+                String.format(" length=%d", length) +
+                String.format(" value=%s", value == null ? "null" : UTF_8.decode(ByteBuffer.wrap(value.binaryValue()))) +
+                ")";
     }
 }

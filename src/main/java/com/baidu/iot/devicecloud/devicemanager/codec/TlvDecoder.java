@@ -1,8 +1,9 @@
 package com.baidu.iot.devicecloud.devicemanager.codec;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
-import com.google.common.base.Charsets;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import lombok.extern.slf4j.Slf4j;
@@ -57,7 +58,7 @@ public class TlvDecoder extends ByteToMessageDecoder {
                     return;
                 }
                 in.readBytes(data);
-                log.debug("TlvDecoder read data success:\n{}", new String(data, Charsets.UTF_8));
+                log.debug("TlvDecoder read data success:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(data)));
 
                 out.add(new TlvMessage(type, data.length, data));
             }

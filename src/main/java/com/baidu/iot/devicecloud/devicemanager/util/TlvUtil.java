@@ -6,12 +6,15 @@ import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.fasterxml.jackson.databind.node.BinaryNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/6.
@@ -80,7 +83,7 @@ public class TlvUtil {
         return checkType(msg, TlvConstant.TYPE_DOWNSTREAM_FINISH);
     }
 
-    public static boolean checkType(TlvMessage msg, int type) {
+    private static boolean checkType(TlvMessage msg, int type) {
         try {
             return msg.getType() == type;
         } catch (Exception e) {
@@ -140,4 +143,16 @@ public class TlvUtil {
         }
         return new TlvMessage(type, s.length(), s.getBytes());
     }
+
+    public static Function<TlvMessage, String> prettyLogString =
+            tlv -> {
+                String logString;
+                try {
+                    logString = ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(tlv.getValue().binaryValue()));
+                } catch (Exception ignore) {
+                    logString = String.valueOf(tlv);
+                    log.warn("Trying to get the pretty hex dump failed, using String.valueOf().");
+                }
+                return logString;
+            };
 }

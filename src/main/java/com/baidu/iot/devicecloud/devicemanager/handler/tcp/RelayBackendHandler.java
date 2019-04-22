@@ -65,16 +65,17 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) throws Exception {
         Channel upstreamChannel = ctx.channel();
-        log.debug("Relay server inner channel {} has read a message: {}", upstreamChannel.toString(), msg.toString());
+        log.debug("The asr-link relay server inner channel {} has read a message:\n{}",
+                upstreamChannel.toString(), String.valueOf(msg));
         if (isDownstreamInitPackage(msg)) {
             initialPackageHasArrived = true;
             if (confirmedConnection(msg)) {
                 upstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMED);
-                log.debug("Subscribing to dcs");
+                log.debug("{} has been confirmed by dcs. Subscribing to dcs", upstreamChannel.toString());
                 downstreamWorkQueue.subscribe(NettyUtil.good2Go(upstreamChannel).<TlvMessage>get());
 
                 downstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMED);
-                log.debug("{} has been confirmed by dcs. Subscribing to asr", upstreamChannel.toString());
+                log.debug("{} has been confirmed by dm. Subscribing to asr", upstreamChannel.toString());
                 workQueue.collectList()
                         .flatMapMany(list -> Flux.fromStream(
                                 Stream.concat(

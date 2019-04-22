@@ -44,7 +44,8 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) throws Exception {
         Channel upstreamChannel = ctx.channel();
-        log.debug("Relay server inner channel {} has read a message: {}", upstreamChannel.toString(), msg.toString());
+        log.debug("The event-link relay server inner channel {} has read a message:\n{}",
+                upstreamChannel.toString(), String.valueOf(msg));
         if (isDownstreamInitPackage(msg)) {
             initialPackageHasArrived = true;
             if (confirmedConnection(msg)) {
