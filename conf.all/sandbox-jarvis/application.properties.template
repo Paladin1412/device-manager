@@ -17,6 +17,7 @@ dcs.proxy.address.state=
 dcs.proxy.address.asr=
 dcs.proxy.address.evt=
 
+tts.proxy.bns=group.ttsproxy-jarvis-sandbox.IOT.all
 tts.proxy.api=10.117.80.48:8997
 #tts.proxy.api=127.0.0.1:8099
 
