@@ -4,30 +4,41 @@ package com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient;
 import com.baidu.iot.devicecloud.devicemanager.bean.AuthorizationMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
+import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.AbstractHttpClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenRequest;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenResponse;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
-import com.baidu.iot.devicecloud.devicemanager.util.BnsUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
+import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import javax.annotation.Nullable;
+import javax.validation.constraints.NotNull;
 
+import java.net.InetSocketAddress;
+import java.net.SocketTimeoutException;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
@@ -40,14 +51,19 @@ import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getTokenFrom
  */
 @Slf4j
 @Component
-public class DeviceIamClient extends AbstractHttpClient {
+public class DeviceIamClient extends AbstractHttpClient implements InitializingBean {
     private static final String DEVICE_IAM_API_VERSION = "v1";
     private static final String[] DEVICE_AUTH_PATH = {"auth"};
     private static final String[] DEVICE_ACCESS_TOKEN_PATH = {"device", "accessToken"};
 
+    private ExecutorService commonSideExecutor;
+
     // 14 * 24 * 60 * 60 = 1209600
     @Value("${expire.token.access: 300}")
     private long accessTokenExpire;
+
+    @Value("${di.scheme:http://}")
+    private String diScheme;
 
     @Nullable
     public DeviceResource auth(AuthorizationMessage authRequest) {
@@ -103,12 +119,12 @@ public class DeviceIamClient extends AbstractHttpClient {
     public AccessTokenResponse getAccessToken(String cuid, String vId, String vKey, String logId) {
         AccessTokenRequest accessTokenRequest = new AccessTokenRequest(cuid, vId, vKey, logId);
 
-        AccessTokenResponse response =  Optional.ofNullable(getTokenFromRedis(accessTokenRequest))
-                .orElse(getAccessTokenFromIAM(accessTokenRequest));
+        AccessTokenResponse response = Optional.ofNullable(getTokenFromRedis(accessTokenRequest))
+                .orElseGet(() -> getAccessTokenFromIAM(accessTokenRequest));
 
         if (response != null && StringUtils.hasText(response.getAccessToken())) {
             log.debug("Obtain access token succeeded, writing to redis. logid:{}", logId);
-            writeAccessTokenToDproxy(cuid, response.getAccessToken());
+            commonSideExecutor.submit(() -> writeAccessTokenToDproxy(cuid, response.getAccessToken()));
             return response;
         }
         log.debug("Obtain access token failed. logid:{}", logId);
@@ -125,6 +141,7 @@ public class DeviceIamClient extends AbstractHttpClient {
     }
 
     @Nullable
+    @Retryable(value = {SocketTimeoutException.class}, backoff = @Backoff(200))
     private AccessTokenResponse getAccessTokenFromIAM(AccessTokenRequest accessTokenRequest) {
         Response response = null;
         try {
@@ -183,14 +200,29 @@ public class DeviceIamClient extends AbstractHttpClient {
     }
 
     private String getFullPath(String[] path) {
-        String root = BnsUtil.getBNSOrUrl(DiConfig.diScheme, DiConfig.diBns, DiConfig.diApi);
-        if (!StringUtils.startsWithIgnoreCase(root, DiConfig.diScheme)) {
-            root = DiConfig.diScheme + root;
+        String domainAddress = getDomainAddress();
+        if (!StringUtils.startsWithIgnoreCase(domainAddress, diScheme)) {
+            domainAddress = diScheme + domainAddress;
         }
         return StringUtils.applyRelativePath(
-                PathUtil.lookAfterSuffix(root),
+                PathUtil.lookAfterSuffix(domainAddress),
                 getFullRelativePath(path)
         );
+    }
+
+    /**
+     * Resolve dcs address according to specified {@code message}
+     * @return {@code ip:port}
+     */
+    @NotNull
+    private String getDomainAddress() {
+        String domainAddress = null;
+        InetSocketAddress hashedAddress = BnsCache.getRandomDiAddress();
+        if (hashedAddress != null) {
+            domainAddress = PathUtil.dropOffPrefix(hashedAddress.toString(), SPLITTER_URL);
+        }
+        Preconditions.checkArgument(StringUtils.hasText(domainAddress), "Couldn't find any di address");
+        return domainAddress;
     }
 
     private String getFullRelativePath(String[] path) {
@@ -198,5 +230,12 @@ public class DeviceIamClient extends AbstractHttpClient {
                 PathUtil.lookAfterSuffix(DEVICE_IAM_API_VERSION),
                 StringUtils.arrayToDelimitedString(path, SPLITTER_URL)
         );
+    }
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        commonSideExecutor = new ThreadPoolExecutor(0, 20,
+                60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>());
     }
 }

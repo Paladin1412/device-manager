@@ -12,7 +12,10 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
-public class DcsProxyServerConfig {
+public class RemoteServerConfig {
+    public static String DPROXY_BNS;
+    public static String DPROXY_API;
+
     public static String DCS_PROXY_BNS;
     public static String DCS_PROXY_API;
 
@@ -22,12 +25,25 @@ public class DcsProxyServerConfig {
     public static String DH_BNS;
     public static String DH_API;
 
+    public static String DI_BNS;
+    public static String DI_API;
+
+    @Value("${dproxy.bns:}")
+    public void setDproxyBns(String dproxyBns) {
+        DPROXY_BNS = dproxyBns;
+    }
+
+    @Value("${dproxy.api:}")
+    public void setDproxyApi(String dproxyApi) {
+        DPROXY_API = dproxyApi;
+    }
+
     @Value("${dcs.proxy.bns:dumi-connect-controller-sandbox-prev-5035.orp.all}")
     public void setDcsProxyBns(String dcsProxyBns) {
         DCS_PROXY_BNS = dcsProxyBns;
     }
 
-    @Value("${dcs.proxy.api}")
+    @Value("${dcs.proxy.api:}")
     public void setDcsProxyApi(String dcsProxyApi) {
         DCS_PROXY_API = dcsProxyApi;
     }
@@ -37,7 +53,7 @@ public class DcsProxyServerConfig {
         TTS_PROXY_BNS = ttsProxyBns;
     }
 
-    @Value("${tts.proxy.api}")
+    @Value("${tts.proxy.api:}")
     public void setTtsProxyApi(String ttsProxyApi) {
         TTS_PROXY_API = ttsProxyApi;
     }
@@ -50,5 +66,15 @@ public class DcsProxyServerConfig {
     @Value("${dh.api:}")
     public void setDhApi(String dhProxyApi) {
         DH_API = dhProxyApi;
+    }
+
+    @Value("${di.bns:}")
+    public void setDiBns(String diBns) {
+        DI_BNS = diBns;
+    }
+
+    @Value("${di.api:}")
+    public void setDiApi(String diApi) {
+        DI_API = diApi;
     }
 }

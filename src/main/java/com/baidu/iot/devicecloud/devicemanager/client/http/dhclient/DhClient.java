@@ -15,11 +15,14 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import javax.validation.constraints.NotNull;
 import java.net.InetSocketAddress;
+import java.net.SocketTimeoutException;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
 
@@ -37,6 +40,7 @@ public class DhClient extends AbstractHttpClient {
     @Value("${dh.scheme:http://}")
     private String dhScheme;
 
+    @Retryable(value = {SocketTimeoutException.class}, backoff = @Backoff(200))
     public Response pushMessage(DataPointMessage message) {
         Request request = buildRequest(message);
         log.debug("Pushing {} to dh", JsonUtil.serialize(message));

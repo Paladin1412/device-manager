@@ -29,12 +29,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.DcsProxyServerConfig.DCS_PROXY_API;
-import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.DcsProxyServerConfig.DCS_PROXY_BNS;
-import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.DcsProxyServerConfig.DH_API;
-import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.DcsProxyServerConfig.DH_BNS;
-import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.DcsProxyServerConfig.TTS_PROXY_API;
-import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.DcsProxyServerConfig.TTS_PROXY_BNS;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DCS_PROXY_API;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DCS_PROXY_BNS;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DH_API;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DH_BNS;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DI_API;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DI_BNS;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DPROXY_API;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DPROXY_BNS;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.TTS_PROXY_API;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.TTS_PROXY_BNS;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_SPACE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.ASR_PORT_OFFSET;
@@ -57,9 +61,11 @@ public class BnsCache {
                 .build(CacheLoader.asyncReloading(new BnsCacheLoader(), Executors.newSingleThreadExecutor()));
 
         bnsList = Arrays.asList(
+                DPROXY_BNS,
                 DCS_PROXY_BNS,
                 TTS_PROXY_BNS,
-                DH_BNS
+                DH_BNS,
+                DI_BNS
         );
         log.info(DCS_PROXY_BNS);
 
@@ -118,6 +124,14 @@ public class BnsCache {
         return getRandomInetAddress(TTS_PROXY_BNS);
     }
 
+    public static InetSocketAddress getRandomDProxyAddress() {
+        return getRandomInetAddress(DPROXY_BNS);
+    }
+
+    public static InetSocketAddress getRandomDiAddress() {
+        return getRandomInetAddress(DI_BNS);
+    }
+
     static InetSocketAddress getRandomInetAddress(String bns) {
         try {
             List<String> ipPorts = getIpPorts(bns);
@@ -146,13 +160,16 @@ public class BnsCache {
         }
 
         if (ipPorts.size() < 1) {
-            String backup = null;
-            if (DCS_PROXY_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(DCS_PROXY_API)) {
+            String backup = null;if (DPROXY_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(DPROXY_API)) {
+                backup = DPROXY_API;
+            } else if (DCS_PROXY_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(DCS_PROXY_API)) {
                 backup = DCS_PROXY_API;
             } else if (TTS_PROXY_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(TTS_PROXY_API)){
                 backup = TTS_PROXY_API;
-            }  else if (DH_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(DH_API)){
+            } else if (DH_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(DH_API)){
                 backup = DH_API;
+            } else if (DI_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(DI_API)){
+                backup = DI_API;
             }
             if (StringUtils.hasText(backup)) {
                 ipPorts.add(backup);

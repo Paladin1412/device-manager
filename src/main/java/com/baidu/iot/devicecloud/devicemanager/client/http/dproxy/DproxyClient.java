@@ -1,9 +1,10 @@
 package com.baidu.iot.devicecloud.devicemanager.client.http.dproxy;
 
+import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.AbstractHttpClient;
-import com.baidu.iot.devicecloud.devicemanager.util.BnsUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
+import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -15,12 +16,18 @@ import okhttp3.internal.annotations.EverythingIsNonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.lang.Nullable;
+import org.springframework.retry.RetryException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 
+import javax.validation.constraints.NotNull;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.SocketTimeoutException;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
@@ -36,13 +43,10 @@ public class DproxyClient extends AbstractHttpClient {
     private static final String DPROXY_ROOT = "DproxyServer";
     private static final String[] DPROXY_COMMAND_PATH = {"cmd"};
 
-    @Value("${dproxy.api}")
-    private String dproxyApi;
-    @Value("${dproxy.bns:}")
-    private String dproxyBns;
     @Value("${dproxy.scheme:http://}")
     private String dproxyScheme;
 
+    @Retryable(value = {RetryException.class}, backoff = @Backoff(200))
     public DproxyResponse sendCommand(DproxyRequest dproxyRequest) {
         Response response = null;
         try {
@@ -58,6 +62,10 @@ public class DproxyClient extends AbstractHttpClient {
             }
         } catch (Exception e) {
             e.printStackTrace();
+            if (e instanceof SocketTimeoutException) {
+                close(response);
+                throw new RetryException(e.getMessage());
+            }
         } finally {
             close(response);
         }
@@ -66,7 +74,8 @@ public class DproxyClient extends AbstractHttpClient {
         return null;
     }
 
-    public DproxyResponse sendCommandAsync(DproxyRequest dproxyRequest) {
+    @Retryable(value = {SocketTimeoutException.class}, backoff = @Backoff(200))
+    public void sendCommandAsync(DproxyRequest dproxyRequest) {
         Request request;
         request = buildDproxyRequest(dproxyRequest);
         sendAsync(request, new Callback() {
@@ -82,10 +91,10 @@ public class DproxyClient extends AbstractHttpClient {
             public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
                     log.debug("Sending command to dproxy succeed, request:{}", call.request().toString());
+                    close(response);
                 }
             }
         });
-        return null;
     }
 
     @Nullable
@@ -103,14 +112,29 @@ public class DproxyClient extends AbstractHttpClient {
     }
 
     private String getFullPath(String[] path) {
-        String root = BnsUtil.getBNSOrUrl(dproxyScheme, dproxyBns, dproxyApi);
-        if (!StringUtils.startsWithIgnoreCase(root, dproxyScheme)) {
-            root = dproxyScheme + root;
+        String domainAddress = getDomainAddress();
+        if (!StringUtils.startsWithIgnoreCase(domainAddress, dproxyScheme)) {
+            domainAddress = dproxyScheme + domainAddress;
         }
         return StringUtils.applyRelativePath(
-                PathUtil.lookAfterSuffix(root),
+                PathUtil.lookAfterSuffix(domainAddress),
                 getFullRelativePath(path)
         );
+    }
+
+    /**
+     * Resolve dcs address according to specified {@code message}
+     * @return {@code ip:port}
+     */
+    @NotNull
+    private String getDomainAddress() {
+        String domainAddress = null;
+        InetSocketAddress hashedAddress = BnsCache.getRandomDProxyAddress();
+        if (hashedAddress != null) {
+            domainAddress = PathUtil.dropOffPrefix(hashedAddress.toString(), SPLITTER_URL);
+        }
+        Preconditions.checkArgument(StringUtils.hasText(domainAddress), "Couldn't find any dproxy address");
+        return domainAddress;
     }
 
     private String getFullRelativePath(String[] path) {

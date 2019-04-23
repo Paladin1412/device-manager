@@ -16,7 +16,7 @@ import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 
-import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.DcsProxyServerConfig.DCS_PROXY_BNS;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DCS_PROXY_BNS;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.ASR_PORT_OFFSET;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.EVENT_PORT_OFFSET;
 
