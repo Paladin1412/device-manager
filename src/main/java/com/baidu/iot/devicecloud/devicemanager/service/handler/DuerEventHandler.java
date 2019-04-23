@@ -96,6 +96,7 @@ import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlu
 @Component
 public class DuerEventHandler extends AbstractLinkableDataPointHandler {
     private static final String KEY_PATTERN = "%s_%s_%s";
+    private static final String RELAY_BACK_HANDLER = "relayBackendHandler";
     private static final byte[] CRLF = {'\r', '\n'};
     private final AccessTokenService accessTokenService;
     private final DirectiveProcessor directiveProcessor;
@@ -211,8 +212,9 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         f.addListener((FutureListener<Channel>) channelFuture -> {
             if (f.isSuccess()) {
                 outboundChannel = f.getNow();
-                outboundChannel.pipeline()
-                        .addLast("relayBackendHandler", new RelayBackendHandler(requestQueue, responseQueue));
+                ChannelPipeline pipelines = outboundChannel.pipeline();
+                pipelines.remove(RELAY_BACK_HANDLER);
+                pipelines.addLast(RELAY_BACK_HANDLER, new RelayBackendHandler(requestQueue, responseQueue));
                 writeAndFlush(outboundChannel, initPackage.apply(message, accessToken));
                 outboundChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
 
