@@ -263,7 +263,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                             accessTokenCache.get(String.format("%s_%s", cuid, sn),
                                     () -> Optional.ofNullable(accessTokenService.try2ObtainAccessToken(cuid, sn))
                                             .orElseGet(AccessTokenResponse::new).getAccessToken());
-
+                    log.debug("Decorate access token for the initial package: {}", accessToken);
                     // append access token to param
                     paramNode.set(PAM_PARAM_AUTHORIZATION, TextNode.valueOf("Bearer " + accessToken));
                     if (!paramNode.has(PAM_PARAM_LINK_VERSION)) {
