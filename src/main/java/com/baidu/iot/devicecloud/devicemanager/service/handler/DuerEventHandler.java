@@ -213,7 +213,9 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             if (f.isSuccess()) {
                 outboundChannel = f.getNow();
                 ChannelPipeline pipelines = outboundChannel.pipeline();
-                pipelines.remove(RELAY_BACK_HANDLER);
+                if (pipelines.get(RELAY_BACK_HANDLER) != null) {
+                    pipelines.remove(RELAY_BACK_HANDLER);
+                }
                 pipelines.addLast(RELAY_BACK_HANDLER, new RelayBackendHandler(requestQueue, responseQueue));
                 writeAndFlush(outboundChannel, initPackage.apply(message, accessToken));
                 outboundChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
