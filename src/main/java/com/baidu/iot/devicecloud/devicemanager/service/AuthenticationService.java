@@ -31,6 +31,9 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -56,6 +59,8 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
     private DcsProxyClient dcsProxyClient;
     private LocalServerInfo localServerInfo;
 
+    private ExecutorService commonSideExecutor;
+
     // project info are almost immutable
     // 14 * 24 * 60 * 60 = 1209600
     @Value("${expire.resource.project: 1209600}")
@@ -79,6 +84,10 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                 .maximumSize(1_000_000)
                 .removalListener(n -> log.info("Removed ({}, {}), caused by: {}", n.getKey(), n.getValue(), n.getCause().toString()))
                 .build();
+
+        commonSideExecutor = new ThreadPoolExecutor(0, 50,
+                60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>());
     }
 
     @Override
@@ -150,12 +159,14 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                 && StringUtils.hasText(projectInfo.getVoiceId())
                 && StringUtils.hasText(projectInfo.getVoiceKey())) {
 
-            DproxyClientProvider
+            commonSideExecutor.submit(() ->
+                    DproxyClientProvider
                     .getInstance()
                     .hset(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectInfo.getId(),
                             projectResourceExpire,
                             CommonConstant.PROJECT_INFO,
-                            deviceResource.getProjectInfo());
+                            deviceResource.getProjectInfo())
+            );
         }
     }
 
