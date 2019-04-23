@@ -69,9 +69,7 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
     public DeviceResource auth(AuthorizationMessage authRequest) {
         Response response = null;
         try {
-            Request request = buildRequest(authRequest, DEVICE_AUTH_PATH, HttpMethod.POST);
-            Assert.notNull(request, "Authorization Request is null");
-            response = sendSync(request);
+            response = getDeviceResource(authRequest);
             if (response.isSuccessful()) {
                 ResponseBody body = response.body();
                 Assert.notNull(body, "Authorization Response body is null");
@@ -97,6 +95,13 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
 
         log.error("Auth failed, response from remote: {}", response);
         return null;
+    }
+
+    @Retryable(value = {SocketTimeoutException.class}, backoff = @Backoff(200))
+    private Response getDeviceResource(AuthorizationMessage authRequest) {
+        Request request = buildRequest(authRequest, DEVICE_AUTH_PATH, HttpMethod.POST);
+        Assert.notNull(request, "Authorization Request is null");
+        return sendSync(request);
     }
 
     private AccessTokenResponse getAccessToken(DeviceResource deviceResource, AuthorizationMessage authRequest) {
