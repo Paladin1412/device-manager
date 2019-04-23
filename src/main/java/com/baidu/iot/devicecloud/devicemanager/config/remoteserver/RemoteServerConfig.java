@@ -38,7 +38,7 @@ public class RemoteServerConfig {
         DPROXY_API = dproxyApi;
     }
 
-    @Value("${dcs.proxy.bns:dumi-connect-controller-sandbox-prev-5035.orp.all}")
+    @Value("${dcs.proxy.bns:}")
     public void setDcsProxyBns(String dcsProxyBns) {
         DCS_PROXY_BNS = dcsProxyBns;
     }
@@ -48,7 +48,7 @@ public class RemoteServerConfig {
         DCS_PROXY_API = dcsProxyApi;
     }
 
-    @Value("${tts.proxy.bns:unknown}")
+    @Value("${tts.proxy.bns:}")
     public void setTtsProxyBns(String ttsProxyBns) {
         TTS_PROXY_BNS = ttsProxyBns;
     }

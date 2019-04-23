@@ -3,7 +3,7 @@ local.network.interface=xgbe0
 dm.tcp.port=$tcp
 #di.api=http://api-iot.baidu-int.com/for-di
 #di.api=http://127.0.0.1:8998
-di.bns=
+di.bns=unknown_bns_di
 di.api=10.117.139.21:8301
 
 # dproxy sandbox
@@ -17,10 +17,11 @@ dcs.proxy.address.state=
 dcs.proxy.address.asr=
 dcs.proxy.address.evt=
 
+tts.proxy.bns=unknown_bns_ttsProxy
 tts.proxy.api=10.117.80.48:8997
 #tts.proxy.api=127.0.0.1:8099
 
-dh.bns=
+dh.bns=unknown_bns_dh
 dh.api=10.115.54.25:8207
 
 local.server.port=
