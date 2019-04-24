@@ -19,6 +19,7 @@ public class ReportService implements ReactorDispatcherHandler<BaseMessage> {
                   AuthenticationService authenticationService,
                   DisconnectedService disconnectedService,
                   HearBeatService hearBeatService,
+                  AdviceService adviceService,
                   DefaultService defaultService) {
         // The first link in chain is supposed to handle the most requests
         this.handler = dataPointService;
@@ -27,6 +28,7 @@ public class ReportService implements ReactorDispatcherHandler<BaseMessage> {
                 .linkWith(authenticationService)
                 .linkWith(disconnectedService)
                 .linkWith(hearBeatService)
+                .linkWith(adviceService)
                 .linkWith(defaultService);
     }
 

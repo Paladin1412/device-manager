@@ -16,6 +16,8 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
 import java.util.Optional;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_ALIVE_INTERVAL;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CLT_ID;
@@ -26,6 +28,8 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HE
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_STANDBY_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_STATUS_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_STREAMING_VERSION;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE_CODE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getFirst;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isCoapOk;
 
@@ -80,26 +84,31 @@ public class ReportHandler {
                     if (o instanceof DataPointMessage) {
 
                         DataPointMessage message = (DataPointMessage) o;
-
                         if (isCoapOk.test(message)) {
                             builder
-                                    .header(HEADER_ALIVE_INTERVAL, Integer.toString(aliveInterval))
-                                    .header(HEADER_STATUS_CODE, "0");
+                                    .header(HEADER_ALIVE_INTERVAL, Integer.toString(aliveInterval));
+                            succeeded.accept(builder);
                         } else {
-                            builder
-                                    .header(HEADER_STATUS_CODE, "-1");
+                            failed.accept(builder);
                         }
                     } else if (o instanceof BaseResponse) {
                         BaseResponse response = (BaseResponse) o;
                         if (response.getCode() == 0) {
-                            builder
-                                    .header(HEADER_STATUS_CODE, "0");
+                            succeeded.accept(builder);
                         } else {
-                            builder
-                                    .header(HEADER_STATUS_CODE, "-1");
+                            failed.accept(builder);
                         }
                     }
                 })
                 .flatMap(builder::syncBody);
     }
+
+    private BiConsumer<ServerResponse.BodyBuilder, String> state =
+            (builder, code) -> builder.header(HEADER_STATUS_CODE, code);
+
+    private Consumer<ServerResponse.BodyBuilder> succeeded =
+            builder -> state.accept(builder, Integer.toString(MESSAGE_SUCCESS_CODE));
+
+    private Consumer<ServerResponse.BodyBuilder> failed =
+            builder -> state.accept(builder, Integer.toString(MESSAGE_FAILURE_CODE));
 }

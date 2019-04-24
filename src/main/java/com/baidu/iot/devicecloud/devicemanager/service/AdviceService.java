@@ -1,6 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.service;
 
-import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
+import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -13,15 +13,15 @@ import reactor.core.publisher.Mono;
  */
 @Slf4j
 @Component
-public class AdviceService extends AbstractLinkableHandlerAdapter<DataPointMessage> {
+public class AdviceService extends AbstractLinkableHandlerAdapter<BaseMessage> {
 
     @Override
-    boolean canHandle(DataPointMessage message) {
+    boolean canHandle(BaseMessage message) {
         return message.getMessageType() == MessageType.ADVICE;
     }
 
     @Override
-    Mono<Object> work(DataPointMessage message) {
+    Mono<Object> work(BaseMessage message) {
         return null;
     }
 }
