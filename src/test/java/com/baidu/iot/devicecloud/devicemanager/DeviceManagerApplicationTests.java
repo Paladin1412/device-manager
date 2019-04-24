@@ -4,7 +4,9 @@ import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.ttsproxyclient.bean.TtsRequest;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
+import com.baidu.iot.devicecloud.devicemanager.service.SecurityService;
 import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +16,7 @@ import org.springframework.test.context.junit4.SpringRunner;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.concurrent.ExecutionException;
 
 @RunWith(SpringRunner.class)
@@ -21,6 +24,9 @@ import java.util.concurrent.ExecutionException;
 public class DeviceManagerApplicationTests {
 	@Autowired
 	private TtsService ttsService;
+
+	@Autowired
+	private SecurityService securityService;
 
 	@Test
 	public void contextLoads() {
@@ -66,4 +72,13 @@ public class DeviceManagerApplicationTests {
 		ttsRequest.setCuid("0285000000001c");
 		ttsService.requestTTSSync(ttsRequest, true);
 	}
+
+	@Test
+	public void testDecrypt() {
+		String secretKey = "IP6DVK5fmLgRxN2mNGbZafEWBIpvIk9PfUnEdMxivunifDMTB272MaX7DC1T4zh50-EfU_gBeHzFMw0Db94icluNXfXsyLXk";
+		String[] items = securityService.decryptSecretKey(secretKey);
+        Assert.assertNotNull(items);
+        Assert.assertTrue(items.length == 4);
+        System.out.println(Arrays.toString(items));
+    }
 }
