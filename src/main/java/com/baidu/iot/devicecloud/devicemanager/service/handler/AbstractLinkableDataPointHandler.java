@@ -33,7 +33,7 @@ public abstract class AbstractLinkableDataPointHandler implements LinkableHandle
         }
     }
 
-    final String getDataPointType(DataPointMessage it) {
+    private String getDataPointType(DataPointMessage it) {
         if (it == null || StringUtils.isEmpty(it.getPath())) {
             return null;
         }

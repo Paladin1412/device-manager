@@ -63,7 +63,7 @@ public class HttpUtil {
                 if (resp != null) {
                     log.debug("Dcs responses: {}", resp.toString());
                     return !resp.isNull() && resp.has(PAM_PARAM_STATUS)
-                            && resp.get(PAM_PARAM_STATUS).asInt(-1) == 0;
+                            && resp.get(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE;
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -71,6 +71,9 @@ public class HttpUtil {
         }
         return false;
     };
+
+    public static Predicate<Integer> isCoapRequest = code -> code >= CoapConstant.COAP_METHOD_EMPTY
+            && code <= CoapConstant.COAP_METHOD_DELETE;
 
     public static Predicate<DataPointMessage> isCoapOk = message -> {
         int code = message.getCode();
@@ -92,24 +95,22 @@ public class HttpUtil {
                 return baseResponse;
             };
 
+    private static BaseResponse baseResponse(Integer code, String message, String logId) {
+        BaseResponse baseResponse = new BaseResponse();
+        baseResponse.setLogId(logId);
+        baseResponse.setCode(code);
+        baseResponse.setMessage(message);
+        return baseResponse;
+    }
+
+    public static BiFunction<String, String, BaseResponse> successResponse =
+            (String logId, String message) -> baseResponse(MESSAGE_SUCCESS_CODE, message, logId);
+
     public static Function<String, BaseResponse> successResponses =
-            (String logId) -> {
-                BaseResponse baseResponse = new BaseResponse();
-                baseResponse.setLogId(logId);
-                baseResponse.setCode(MESSAGE_SUCCESS_CODE);
-                baseResponse.setMessage(MESSAGE_SUCCESS);
-                return baseResponse;
-            };
+            logId -> baseResponse(MESSAGE_SUCCESS_CODE, MESSAGE_SUCCESS, logId);
 
     public static BiFunction<String, String, BaseResponse> failedResponses =
-            (String logId, String message) -> {
-                BaseResponse baseResponse = new BaseResponse();
-                baseResponse.setLogId(logId);
-                baseResponse.setCode(MESSAGE_FAILURE_CODE);
-                baseResponse.setMessage(MESSAGE_FAILURE);
-                baseResponse.setMessage(message);
-                return baseResponse;
-            };
+            (String logId, String message) -> baseResponse(MESSAGE_FAILURE_CODE, message, logId);
 
     public static Function<BaseMessage, BaseResponse> successResponsesWithMessage =
             (BaseMessage message) -> successResponses.apply(message != null ? message.getLogId() : null);

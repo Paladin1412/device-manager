@@ -23,7 +23,6 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_DIALOG_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_MESSAGE_ID;
-import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_NAME;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.PRIVATE_PROTOCOL_DIALOGUE_FINISHED;
 import static com.baidu.iot.devicecloud.devicemanager.util.DirectiveUtil.assembleDuerPrivateDirective;
@@ -36,6 +35,7 @@ import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isLegalType;
  */
 @Slf4j
 public class Adapter {
+    @SuppressWarnings("unused")
     public static List<TlvMessage> directive2TLV(List<JsonNode> directives, int type) {
         if (directives == null || !isLegalType(type)) {
             return Collections.emptyList();
@@ -115,15 +115,6 @@ public class Adapter {
         assembled.setCode(CoapConstant.COAP_METHOD_PUT);
         assembled.setPath(PathUtil.lookAfterPrefix(DataPointConstant.DATA_POINT_DUER_DIRECTIVE));
         assembled.setPayload(JsonUtil.serialize(directive));
-        assembled.setDialogueFinished(
-                PRIVATE_PROTOCOL_DIALOGUE_FINISHED.equalsIgnoreCase(
-                        directive
-                                .path(DIRECTIVE_KEY_DIRECTIVE)
-                                .path(DIRECTIVE_KEY_HEADER)
-                                .path(DIRECTIVE_KEY_HEADER_NAME)
-                                .asText()
-                )
-        );
         return assembled;
     }
 

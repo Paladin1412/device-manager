@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isCoapRequest;
+
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/19.
  *
@@ -14,18 +16,26 @@ import reactor.core.publisher.Mono;
  */
 @Component
 public class DataPointChainedHandler implements ReactorDispatcherHandler<DataPointMessage> {
-    private LinkableHandler<DataPointMessage> handler;
+    private LinkableHandler<DataPointMessage> requestHandler;
+    private LinkableHandler<DataPointMessage> responseHandler;
 
     @Autowired
-    DataPointChainedHandler(DuerEventHandler duerEventHandler) {
+    DataPointChainedHandler(DuerEventHandler duerEventHandler,
+                            DiscardHandler discardHandler,
+                            DataPointAdviceHandler adviceHandler) {
         // The first link in chain is supposed to handle the most requests
-        this.handler = duerEventHandler;
+        this.requestHandler = duerEventHandler;
         // Link the chain up
+        this.requestHandler.linkWith(discardHandler);
 
+        this.responseHandler = adviceHandler;
     }
 
     @Override
     public Mono<Object> handle(DataPointMessage message) {
-        return handler.handle(message);
+        if (isCoapRequest.test(message.getCode())) {
+            return requestHandler.handle(message);
+        }
+        return responseHandler.handle(message);
     }
 }

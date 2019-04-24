@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.codec.multipart.Part;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.BodyExtractors;
@@ -23,6 +24,7 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -30,15 +32,13 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.baidu.iot.devicecloud.devicemanager.adapter.Adapter.try2appendDialogueFinished;
-import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_DELETE;
-import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_EMPTY;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_PUT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_NEED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_SECRET_KEY;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.assembleFromHeader;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
-
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isCoapRequest;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/29.
@@ -55,13 +55,15 @@ public class PushHandler {
         this.pushService = pushService;
     }
 
+    @NonNull
     public Mono<ServerResponse> deal(ServerRequest request) {
         BaseMessage message = new BaseMessage();
         assembleFromHeader.accept(request, message);
         request.queryParam("clt_id").ifPresent(message::setCltId);
         request.queryParam("msgid").ifPresent(message::setLogId);
         int method = figureOutMethod(request);
-//        message.setNeedAck(true);
+        // pushing needs ack
+        message.setNeedAck(true);
         List<Integer> idList = new ArrayList<>();
         return request.body(BodyExtractors.toMultipartData())
                 .flatMap(parts -> {
@@ -77,7 +79,11 @@ public class PushHandler {
                     return pushService.push(messages)
                             .flatMap(baseResponse -> {
                                 if (baseResponse.getCode() == 0) {
-                                    return ServerResponse.ok().body(pushService.check(message, key, idList), BaseResponse.class);
+                                    // waiting the result for 5 seconds.
+                                    Mono<BaseResponse> responseMono = pushService.check(message, key, idList)
+                                            .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(message.getLogId(), "Waiting ack timeout")));
+
+                                    return ServerResponse.ok().body(responseMono, BaseResponse.class);
                                 } else {
                                     return ServerResponse.ok().body(
                                             BodyInserters.fromObject(failedResponses.apply(message.getLogId(), "Pushing message failed"))
@@ -95,7 +101,7 @@ public class PushHandler {
             String methodStr = optMethod.get();
             try {
                 int opt = Integer.parseInt(methodStr);
-                if (opt >= COAP_METHOD_EMPTY && opt <= COAP_METHOD_DELETE) {
+                if (isCoapRequest.test(opt)) {
                     method = opt;
                 }
             } catch (NumberFormatException ignore) {}

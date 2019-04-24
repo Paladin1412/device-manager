@@ -3,12 +3,13 @@ package com.baidu.iot.devicecloud.devicemanager.service;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
+import com.baidu.iot.devicecloud.devicemanager.bean.LocalServerInfo;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dhclient.DhClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
+import com.baidu.iot.devicecloud.devicemanager.client.http.redirectclient.RedirectClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.ttsproxyclient.TtsProxyClient;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
-import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -72,7 +73,9 @@ public class PushService implements InitializingBean {
 
     private final DhClient client;
     private final TtsProxyClient ttsProxyClient;
+    private final RedirectClient redirectClient;
     private final SecurityService securityService;
+    private final LocalServerInfo localServerInfo;
     private Map<String, UnicastProcessor<DataPointMessage>> pooledMonoSignals;
 
     private DataBufferFactory dataBufferFactory;
@@ -80,11 +83,23 @@ public class PushService implements InitializingBean {
     @Value("${expire.tts.bytes:1800}")
     private Integer ttsExpire;
 
+    @Value("${dm.scheme:http://}")
+    private String dmScheme;
+
+    @Value("${dm.report.api:/api/v2/report}")
+    private String dmReportApi;
+
     @Autowired
-    public PushService(DhClient client, TtsProxyClient ttsProxyClient, SecurityService securityService) {
+    public PushService(DhClient client,
+                       TtsProxyClient ttsProxyClient,
+                       RedirectClient redirectClient,
+                       SecurityService securityService,
+                       LocalServerInfo localServerInfo) {
         this.client = client;
         this.ttsProxyClient = ttsProxyClient;
+        this.redirectClient = redirectClient;
         this.securityService = securityService;
+        this.localServerInfo = localServerInfo;
     }
 
     @Override
@@ -113,11 +128,28 @@ public class PushService implements InitializingBean {
     }
 
     public void advice(String key, DataPointMessage message) {
-        UnicastProcessor<DataPointMessage> signal = pooledMonoSignals.get(key);
-        if (signal != null && !signal.isTerminated()) {
-            signal.onNext(message);
-            signal.dispose();
-            pooledMonoSignals.remove(key);
+        if (StringUtils.isEmpty(key)) {
+            return;
+        }
+        String[] items = securityService.decryptSecretKey(key);
+        if (items != null && items.length >= 4) {
+            String ip = items[1];
+            String port = items[2];
+            if (localServerInfo.getLocalServerIp().equalsIgnoreCase(ip)) {
+                UnicastProcessor<DataPointMessage> signal = pooledMonoSignals.get(key);
+                if (signal != null && !signal.isTerminated()) {
+                    signal.onNext(message);
+                }
+            } else {
+                redirectClient.redirectDataPointAsync(ip, port, message).handleAsync(
+                        (r, t) -> {
+                            if (r != null && r.isSuccessful()) {
+                                log.info("Redirecting to {}:{} succeeded", ip, port);
+                            }
+                            return r;
+                        }
+                );
+            }
         }
     }
 
@@ -158,35 +190,30 @@ public class PushService implements InitializingBean {
         return Mono.from(
                 Flux.fromIterable(messages)
                     .doOnNext(dataPointMessages -> {
-                        boolean isDialogueFinished = dataPointMessages.isDialogueFinished();
-                        if (!isDialogueFinished) {
-                            failed.incrementAndGet();
-                        }
+                        failed.incrementAndGet();
                         Mono.from(push(dataPointMessages))
                                 .subscribe(baseResponse -> {
-                                    if (baseResponse.getCode() == CommonConstant.MESSAGE_SUCCESS_CODE
-                                            && !isDialogueFinished) {
+                                    if (baseResponse.getCode() == CommonConstant.MESSAGE_SUCCESS_CODE) {
                                         failed.decrementAndGet();
                                     }
                                 });
                     })
-                    .flatMap(list -> {
-                        int fails = failed.get();
-                        if (fails == 0) {
-                            return Mono.just(successResponses.apply(logId));
-                        }
-                        String message = String.format("Should've sent %d messages, but %d failed", size, fails);
-                        return Mono.just(failedResponses.apply(logId, message));
-                    })
+                    .then(Mono.fromCallable(
+                            () -> {
+                                int fails = failed.get();
+                                if (fails == 0) {
+                                    return successResponses.apply(logId);
+                                }
+                                String message = String.format("Should've pushed %d messages, but %d failed", size, fails);
+                                return failedResponses.apply(logId, message);
+                            }
+                    ))
         );
     }
 
     public Mono<BaseResponse> check(BaseMessage message, String key, List<Integer> stub) {
-        if (message == null) {
-            return Mono.just(successResponses.apply(null));
-        }
-        if (stub == null || stub.size() < 1 || !message.isNeedAck()) {
-            return Mono.just(successResponses.apply(message.getLogId()));
+        if (message == null || !message.isNeedAck() || stub == null || stub.size() < 1) {
+            return Mono.just(successResponsesWithMessage.apply(message));
         }
         UnicastProcessor<DataPointMessage> signal = pooledMonoSignals.get(key);
         if (signal == null) {
@@ -203,6 +230,8 @@ public class PushService implements InitializingBean {
                     }
                     if (stub.isEmpty()) {
                         sink.success(successResponsesWithMessage.apply(message));
+                        signal.onComplete();
+                        pooledMonoSignals.remove(key);
                     }
                 }
             }
@@ -257,7 +286,7 @@ public class PushService implements InitializingBean {
                                         String ttsProxyUrl = ttsProxyClient.getTTSProxyURL();
                                         String finalUrl =
                                                 StringUtils.applyRelativePath(
-                                                        PathUtil.lookAfterSuffix(ttsProxyUrl),
+                                                        ttsProxyUrl,
                                                         String.format("%s%s", audioKey, EXTENSION_MP3)
                                                 );
                                         finalPayloadNode.set(DIRECTIVE_KEY_PAYLOAD_URL, TextNode.valueOf(finalUrl));
