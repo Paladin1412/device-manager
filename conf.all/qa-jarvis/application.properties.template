@@ -20,6 +20,7 @@ dcs.proxy.address.evt=
 tts.proxy.bns=group.ttsproxy-jarvis-qa.IOT.all
 tts.proxy.api=10.117.80.48:8997
 #tts.proxy.api=127.0.0.1:8099
+tts.proxy.path=qa/cached/tts/v1/
 
 dh.bns=unknown_bns_dh
 dh.api=10.115.54.25:8207
