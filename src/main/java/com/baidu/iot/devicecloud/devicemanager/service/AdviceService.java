@@ -13,7 +13,7 @@ import reactor.core.publisher.Mono;
  */
 @Slf4j
 @Component
-public class PushCallbackService extends AbstractLinkableHandlerAdapter<DataPointMessage> {
+public class AdviceService extends AbstractLinkableHandlerAdapter<DataPointMessage> {
 
     @Override
     boolean canHandle(DataPointMessage message) {

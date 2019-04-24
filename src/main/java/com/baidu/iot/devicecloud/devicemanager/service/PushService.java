@@ -12,6 +12,8 @@ import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.ResponseBody;
 import org.apache.commons.codec.binary.Base64;
@@ -45,6 +47,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.EXTENSION_MP3;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DIRECTIVE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
@@ -126,7 +129,8 @@ public class PushService implements InitializingBean {
                         ResponseBody body = response.body();
                         if (body != null) {
                             try {
-                                log.debug("DH response: {}", body.string());
+                                byte[] bytes = body.bytes();
+                                log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(bytes)));
                             } catch (IOException ignore) { }
                         }
                         return Mono.just(successResponsesWithMessage.apply(message));
@@ -141,31 +145,39 @@ public class PushService implements InitializingBean {
         if (messages == null || messages.size() < 1) {
             return Mono.empty();
         }
-        final AtomicInteger succeeded = new AtomicInteger(0);
+        final AtomicInteger failed = new AtomicInteger(0);
         final int size = messages.size();
         final String logId;
         DataPointMessage first = messages.get(0);
         if (first != null) {
             logId = first.getLogId();
         } else {
-            logId = "unknown";
+            logId = null;
         }
 
-        return Mono.from(Flux.fromIterable(messages)
-                .doOnNext(dataPointMessages -> push(dataPointMessages)
-                        .subscribe(baseResponse -> {
-                            if (baseResponse.getCode() == CommonConstant.MESSAGE_SUCCESS_CODE) {
-                                succeeded.incrementAndGet();
-                            }
-                        }))
-                .flatMap(list -> {
-                    int success = succeeded.get();
-                    if (size == success) {
-                        return Mono.just(successResponses.apply(logId));
-                    }
-                    String message = String.format("Should've sent %d messages, but %d failed", size, size - success);
-                    return Mono.just(failedResponses.apply(logId, message));
-                })
+        return Mono.from(
+                Flux.fromIterable(messages)
+                    .doOnNext(dataPointMessages -> {
+                        boolean isDialogueFinished = dataPointMessages.isDialogueFinished();
+                        if (!isDialogueFinished) {
+                            failed.incrementAndGet();
+                        }
+                        Mono.from(push(dataPointMessages))
+                                .subscribe(baseResponse -> {
+                                    if (baseResponse.getCode() == CommonConstant.MESSAGE_SUCCESS_CODE
+                                            && !isDialogueFinished) {
+                                        failed.decrementAndGet();
+                                    }
+                                });
+                    })
+                    .flatMap(list -> {
+                        int fails = failed.get();
+                        if (fails == 0) {
+                            return Mono.just(successResponses.apply(logId));
+                        }
+                        String message = String.format("Should've sent %d messages, but %d failed", size, fails);
+                        return Mono.just(failedResponses.apply(logId, message));
+                    })
         );
     }
 
@@ -245,7 +257,9 @@ public class PushService implements InitializingBean {
                                         String ttsProxyUrl = ttsProxyClient.getTTSProxyURL();
                                         String finalUrl =
                                                 StringUtils.applyRelativePath(
-                                                        PathUtil.lookAfterSuffix(ttsProxyUrl), audioKey);
+                                                        PathUtil.lookAfterSuffix(ttsProxyUrl),
+                                                        String.format("%s%s", audioKey, EXTENSION_MP3)
+                                                );
                                         finalPayloadNode.set(DIRECTIVE_KEY_PAYLOAD_URL, TextNode.valueOf(finalUrl));
                                     });
                         }

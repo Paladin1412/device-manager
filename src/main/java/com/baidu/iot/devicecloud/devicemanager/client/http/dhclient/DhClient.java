@@ -44,7 +44,7 @@ public class DhClient extends AbstractHttpClient {
     public Response pushMessage(DataPointMessage message) {
         Request request = buildRequest(message);
         log.debug("Pushing {} to dh", JsonUtil.serialize(message));
-        log.debug("Request dh", request);
+        log.debug("Request dh {}", request);
         return sendSync(request);
     }
 

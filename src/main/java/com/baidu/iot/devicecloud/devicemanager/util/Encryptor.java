@@ -39,8 +39,8 @@ public class Encryptor {
         return Base64.encodeBase64URLSafeString(cipherData);
     }
 
-    public String decrypt(String encrypData) throws Exception {
-        byte[] data = Base64.decodeBase64(encrypData.getBytes());
+    public String decrypt(String encryptedData) throws Exception {
+        byte[] data = Base64.decodeBase64(encryptedData.getBytes());
 
         cipher.init(Cipher.DECRYPT_MODE, secretKey, random);
         byte[] plainData = cipher.doFinal(data);

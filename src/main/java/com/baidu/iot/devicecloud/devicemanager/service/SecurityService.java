@@ -48,4 +48,16 @@ public class SecurityService {
             return ERROR;
         }
     }
+
+    public String[] decryptSecretKey(String secretKey) {
+        String[] items = new String[]{};
+        Encryptor encryptor = Encryptor.EncryptHelper.getInstance();
+        try {
+            return StringUtils.tokenizeToStringArray(encryptor.decrypt(secretKey), SPLITTER);
+        } catch (Exception e) {
+            log.error("Something goes wrong when decrypting the secret key: {}", secretKey);
+            e.printStackTrace();
+        }
+        return items;
+    }
 }

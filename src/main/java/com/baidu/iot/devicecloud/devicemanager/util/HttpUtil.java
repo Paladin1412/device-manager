@@ -95,9 +95,7 @@ public class HttpUtil {
     public static Function<String, BaseResponse> successResponses =
             (String logId) -> {
                 BaseResponse baseResponse = new BaseResponse();
-                if (StringUtils.hasText(logId)) {
-                    baseResponse.setLogId(logId);
-                }
+                baseResponse.setLogId(logId);
                 baseResponse.setCode(MESSAGE_SUCCESS_CODE);
                 baseResponse.setMessage(MESSAGE_SUCCESS);
                 return baseResponse;

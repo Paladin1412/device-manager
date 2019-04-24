@@ -47,6 +47,9 @@ public class TtsProxyClient extends AbstractHttpClient {
     @Value("${tts.proxy.scheme:http://}")
     private String ttsProxyScheme;
 
+    @Value("${tts.proxy.root:qa/cached/tts/v1/}")
+    private String ttsProxyPath;
+
     public CompletableFuture<Response> requestTtsAsync(TtsRequest message, boolean isPre) {
         Request request = buildRequest(message, isPre);
         Assert.notNull(request, "TTS Proxy Request is null");
@@ -93,14 +96,15 @@ public class TtsProxyClient extends AbstractHttpClient {
     }
 
     public String getTTSProxyURL() {
-        return getFullPath(TTS_PROXY_PATH);
+        String domainAddress = getDomainAddress();
+        return StringUtils.applyRelativePath(
+                PathUtil.lookAfterSuffix(domainAddress),
+                ttsProxyPath
+        );
     }
 
     private String getFullPath(String[] path) {
         String domainAddress = getDomainAddress();
-        if (!StringUtils.startsWithIgnoreCase(domainAddress, ttsProxyScheme)) {
-            domainAddress = ttsProxyScheme + domainAddress;
-        }
         return StringUtils.applyRelativePath(
                 PathUtil.lookAfterSuffix(domainAddress),
                 getFullRelativePath(path)
@@ -119,6 +123,9 @@ public class TtsProxyClient extends AbstractHttpClient {
             domainAddress = PathUtil.dropOffPrefix(hashedAddress.toString(), SPLITTER_URL);
         }
         Preconditions.checkArgument(StringUtils.hasText(domainAddress), "Couldn't find any tts proxy address");
+        if (!StringUtils.startsWithIgnoreCase(domainAddress, ttsProxyScheme)) {
+            domainAddress = ttsProxyScheme + domainAddress;
+        }
         return domainAddress;
     }
 
