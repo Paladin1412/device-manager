@@ -13,10 +13,12 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
 import okio.Buffer;
+import org.springframework.beans.BeanUtils;
 import org.springframework.util.StringUtils;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_METADATA;
@@ -111,11 +113,15 @@ public class Adapter {
 
     private static DataPointMessage directive2DataPoint0(JsonNode directive, DataPointMessage origin) {
         DataPointMessage assembled = new DataPointMessage();
+        Optional.ofNullable(origin).ifPresent(
+                dp -> BeanUtils.copyProperties(origin, assembled)
+        );
         assembled.setVersion(origin != null ? origin.getVersion() : DEFAULT_VERSION);
         assembled.setId(origin != null ? origin.getId() : IdGenerator.nextId());
         assembled.setCode(CoapConstant.COAP_METHOD_PUT);
         assembled.setPath(PathUtil.lookAfterPrefix(DataPointConstant.DATA_POINT_DUER_DIRECTIVE));
         assembled.setPayload(JsonUtil.serialize(directive));
+
         return assembled;
     }
 
@@ -125,14 +131,12 @@ public class Adapter {
             JsonNode first = directives.get(0);
             JsonNode header = first.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_HEADER);
             String dialogueRequestId = header.path(DIRECTIVE_KEY_HEADER_DIALOG_ID).asText();
-            if (StringUtils.hasText(dialogueRequestId)) {
-                directives.add(assembleDuerPrivateDirective(
-                        PRIVATE_PROTOCOL_DIALOGUE_FINISHED,
-                        dialogueRequestId,
-                        header.path(DIRECTIVE_KEY_HEADER_MESSAGE_ID).asText(),
-                        directives.size() + 1
-                ));
-            }
+            directives.add(assembleDuerPrivateDirective(
+                    PRIVATE_PROTOCOL_DIALOGUE_FINISHED,
+                    dialogueRequestId,
+                    header.path(DIRECTIVE_KEY_HEADER_MESSAGE_ID).asText(),
+                    directives.size() + 1
+            ));
         } catch (Exception e) {
             log.error("Trying to append DialogueFinished at last failed: {}", e.getMessage());
             e.printStackTrace();

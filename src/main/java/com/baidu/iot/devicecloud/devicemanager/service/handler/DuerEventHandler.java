@@ -96,7 +96,6 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_P
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_USER_AGENT;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlush;
 
 /**
@@ -287,12 +286,11 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                     }
                 ))
                 .collectList()
-                .doOnNext(list -> pushService.push(deal(list, message)))
+                .flatMap(list -> pushService.push(deal(list, message)))
                 .doFinally(signalType -> {
                     accessTokenService.refreshAccessToken(message);
                     pool.release(outboundChannel);
                 })
-                .flatMap(list -> Mono.just(successResponses.apply(message.getLogId())))
                 .switchIfEmpty(Mono.just(failedResponses.apply(message.getLogId(), "Nothing to respond")));
     }
 
