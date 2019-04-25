@@ -68,9 +68,12 @@ public class NettyUtil {
 
     public static <T> Supplier<Consumer<T>> good2Go(Channel channel) {
         return () -> (T t) -> {
+            if (channel == null || !channel.isActive()) {
+                log.debug("{} has already been reset by peer");
+                return;
+            }
             if (channel.hasAttr(CONFIRMATION_STATE)
                     && ConfirmationStates.CONFIRMED == channel.attr(CONFIRMATION_STATE).get()) {
-                log.debug("{} has already been confirmed", channel.toString());
                 writeAndFlush(channel, t);
             } else {
                 log.debug("{} has not been confirmed, the message {} being discarded.", channel.toString(), String.valueOf(t));
