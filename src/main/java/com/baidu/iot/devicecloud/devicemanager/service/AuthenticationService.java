@@ -82,7 +82,10 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                 .expireAfterWrite(ONE_MINUTE_SECONDS, TimeUnit.SECONDS)
                 .initialCapacity(1_000)
                 .maximumSize(1_000_000)
-                .removalListener(n -> log.info("Removed ({}, {}), caused by: {}", n.getKey(), n.getValue(), n.getCause().toString()))
+                .removalListener(
+                        n ->log.info("Removed Access Token: ({}, {}), caused by: {}",
+                                n.getKey(), n.getValue(), n.getCause().toString())
+                )
                 .build();
 
         commonSideExecutor = new ThreadPoolExecutor(0, 50,

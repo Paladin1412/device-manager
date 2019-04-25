@@ -35,6 +35,8 @@ import static com.baidu.iot.devicecloud.devicemanager.adapter.Adapter.try2append
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_PUT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_NEED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_SECRET_KEY;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_AUDIO;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_METADATA;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.assembleFromHeader;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
@@ -68,11 +70,11 @@ public class PushHandler {
         return request.body(BodyExtractors.toMultipartData())
                 .flatMap(parts -> {
                     // The order of directives would be sent to device
-                    List<Part> metadata = parts.getOrDefault("metadata", new ArrayList<>());
+                    List<Part> metadata = parts.getOrDefault(PARAMETER_METADATA, new ArrayList<>());
                     if (metadata.size() < 1) {
                         return Mono.empty();
                     }
-                    List<Part> audio = parts.getOrDefault("audio", new ArrayList<>());
+                    List<Part> audio = parts.getOrDefault(PARAMETER_AUDIO, new ArrayList<>());
 
                     String key = pushService.pool(message);
                     List<DataPointMessage> messages = assemble(method, metadata, audio, idList, key, message);

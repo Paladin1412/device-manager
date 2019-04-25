@@ -26,6 +26,7 @@ public class CommonConstant {
     public static final String MESSAGE_ACK_NEED = "needAck";
     public static final String MESSAGE_ACK_SECRET_KEY = "secretKey";
 
+    public static final String PARAMETER_BEARER = "Bearer ";
     public static final String PARAMETER_TOKEN = "token";
     public static final String PARAMETER_UUID = "uuid";
     public static final String PARAMETER_CUID = "cuid";
@@ -36,6 +37,12 @@ public class CommonConstant {
     public static final String PARAMETER_QUERY = "query";
     public static final String PARAMETER_PAYLOAD = "payload";
     public static final String PARAMETER_MISC = "misc";
+    public static final String PARAMETER_METADATA = "metadata";
+    public static final String PARAMETER_AUDIO = "audio";
+    public static final String PARAMETER_NAME = "name";
+    public static final String PARAMETER_CID = "cid:";
+    public static final String PARAMETER_CONTENT_DISPOSITION = "content-disposition";
+    public static final String PARAMETER_CONTENT_ID = "Content-ID";
 
     // splitters
     public static final String SPLITTER_DOLLAR = "$";

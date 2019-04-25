@@ -49,6 +49,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.EXTENSION_MP3;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_CID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_CONTENT_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DIRECTIVE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
@@ -266,7 +268,7 @@ public class PushService implements InitializingBean {
                             .path(DIRECTIVE_KEY_PAYLOAD)
                             .path(DIRECTIVE_KEY_PAYLOAD_URL)
                             .asText();
-                    if (StringUtils.hasText(url) && StringUtils.startsWithIgnoreCase(url,"cid:")) {
+                    if (StringUtils.hasText(url) && StringUtils.startsWithIgnoreCase(url,PARAMETER_CID)) {
                         String cid = url.split(Pattern.quote(SPLITTER_COLON))[1];
                         JsonNode header = jsonNode.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_HEADER);
                         String dialogRequestId = header.path(DIRECTIVE_KEY_HEADER_DIALOG_ID).asText();
@@ -322,7 +324,7 @@ public class PushService implements InitializingBean {
         Map<String, Part> map = new HashMap<>();
         audios.forEach(part -> {
             HttpHeaders headers = part.headers();
-            String contentId = headers.getFirst("Content-ID");
+            String contentId = headers.getFirst(PARAMETER_CONTENT_ID);
             if(StringUtils.hasText(contentId)) {
                 map.put(contentId, part);
             }

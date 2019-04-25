@@ -2,6 +2,7 @@ package com.baidu.iot.devicecloud.devicemanager.service.handler;
 
 import com.baidu.iot.devicecloud.devicemanager.adapter.Adapter;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
+import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
@@ -15,6 +16,7 @@ import com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
 import com.baidu.iot.devicecloud.devicemanager.service.AccessTokenService;
+import com.baidu.iot.devicecloud.devicemanager.service.PushService;
 import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -65,6 +67,11 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -72,10 +79,13 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_UNSUPPORTED_CONTENT_FORMAT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CONTENT_TYPE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_BEARER;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_METADATA;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_EVENT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
@@ -85,6 +95,8 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_P
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_STANDBY_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_USER_AGENT;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlush;
 
 /**
@@ -99,18 +111,23 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
     private static final String RELAY_BACK_HANDLER = "relayBackendHandler";
     private static final byte[] CRLF = {'\r', '\n'};
     private final AccessTokenService accessTokenService;
+    private final PushService pushService;
     private final DirectiveProcessor directiveProcessor;
 
     private Channel outboundChannel;
     public Cache<String, Optional<String>> cache;
     private ChannelPoolMap<InetSocketAddress, SimpleChannelPool> poolMap;
+    private ExecutorService commonSideExecutor;
 
     @Value("${dcs.proxy.address.evt:}")
     private String dcsProxyEvtAddress;
 
     @Autowired
-    public DuerEventHandler(AccessTokenService accessTokenService, DirectiveProcessor directiveProcessor) {
+    public DuerEventHandler(AccessTokenService accessTokenService,
+                            PushService pushService,
+                            DirectiveProcessor directiveProcessor) {
         this.accessTokenService = accessTokenService;
+        this.pushService = pushService;
         this.directiveProcessor = directiveProcessor;
 
         cache = CacheBuilder.newBuilder()
@@ -118,9 +135,12 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                 .maximumSize(1_000_000)
                 .expireAfterWrite(Duration.ofMinutes(3))
                 .recordStats()
-                .removalListener((RemovalListener<String, Optional<String>>) n -> log.debug("Removed: ({}, {}), caused by: {}", n.getKey(), n.getValue(), n.getCause().toString()))
+                .removalListener(
+                        (RemovalListener<String, Optional<String>>) n ->
+                                log.debug("Removed Access Token: ({}, {}), caused by: {}",
+                                        n.getKey(), n.getValue().orElse("null"), n.getCause().toString())
+                )
                 .build();
-
 
         poolMap = new AbstractChannelPoolMap<InetSocketAddress, SimpleChannelPool>() {
             @Override
@@ -161,6 +181,10 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                 );
             }
         };
+
+        commonSideExecutor = new ThreadPoolExecutor(0, 50,
+                60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>());
     }
 
     @Override
@@ -170,6 +194,10 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
 
     @Override
     Mono<Object> work(DataPointMessage message) {
+        if (StringUtils.isEmpty(message.getPayload())) {
+            return Mono.just(emptyResponses.apply(message));
+        }
+
         String cuid = message.getDeviceId();
         String pid = message.getProductId();
         String sn = message.getSn();
@@ -183,10 +211,26 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         }
         if (!optAccessToken.isPresent()) {
             cache.invalidate(key);
-            return Mono.just(failedResponses.apply(message));
+            return Mono.just(unauthorizedResponses.apply(message));
         }
 
-        String accessToken = optAccessToken.get();
+        CompletableFuture<Mono<BaseResponse>> future =
+                CompletableFuture.supplyAsync(() -> doWork(message, optAccessToken.get()), commonSideExecutor);
+        future.handleAsync(
+                (r, t) -> r
+                        .timeout(
+                                Duration.ofSeconds(5),
+                                Mono.just(failedResponses.apply(message.getLogId(), "Processing timeout"))
+                        )
+                        .subscribe(baseResponse -> {
+                            log.debug("{} executing result:{} messageId:{}",
+                                    DATA_POINT_DUER_EVENT, baseResponse, message.getId());
+                        })
+        );
+        return Mono.just(successDataPointResponses.get());
+    }
+
+    private Mono<BaseResponse> doWork(DataPointMessage message, String accessToken) {
         // all tlv messages those should be sent to dcs
         final UnicastProcessor<TlvMessage> requestQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
         // all tlv messages those received from dcs
@@ -229,23 +273,27 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             }
         });
 
-        return Mono.from(Flux.push(fluxSink -> responseQueue.subscribe(new BaseSubscriber<TlvMessage>() {
-            @Override
-            protected void hookOnNext(TlvMessage value) {
-                fluxSink.next(value);
-            }
+        return Flux.push(fluxSink -> responseQueue.subscribe(
+                    new BaseSubscriber<TlvMessage>() {
+                        @Override
+                        protected void hookOnNext(TlvMessage value) {
+                            fluxSink.next(value);
+                        }
 
-            @Override
-            protected void hookOnComplete() {
-                fluxSink.complete();
-            }
-        }))
+                        @Override
+                        protected void hookOnComplete() {
+                            fluxSink.complete();
+                        }
+                    }
+                ))
                 .collectList()
-                .flatMapMany(list -> Flux.fromIterable(deal(list, message)))
-                .take(1)
-                .doOnNext(next -> accessTokenService.refreshAccessToken(message))
-                .doFinally(signalType -> pool.release(outboundChannel))
-                .switchIfEmpty(Mono.just(successResponses.get())));
+                .doOnNext(list -> pushService.push(deal(list, message)))
+                .doFinally(signalType -> {
+                    accessTokenService.refreshAccessToken(message);
+                    pool.release(outboundChannel);
+                })
+                .flatMap(list -> Mono.just(successResponses.apply(message.getLogId())))
+                .switchIfEmpty(Mono.just(failedResponses.apply(message.getLogId(), "Nothing to respond")));
     }
 
     private final BiFunction<DataPointMessage, String, TlvMessage> initPackage =
@@ -256,7 +304,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                 param.set(PAM_PARAM_DUEROS_DEVICE_ID, TextNode.valueOf(message.getDeviceId()));
                 param.set(PAM_PARAM_STANDBY_DEVICE_ID, TextNode.valueOf(message.getStandbyDeviceId()));
                 param.set(PAM_PARAM_USER_AGENT, TextNode.valueOf(message.getUserAgent()));
-                param.set(PAM_PARAM_AUTHORIZATION, TextNode.valueOf("Bearer " + accessToken));
+                param.set(PAM_PARAM_AUTHORIZATION, TextNode.valueOf(PARAMETER_BEARER + accessToken));
                 param.set(PAM_PARAM_LINK_VERSION, IntNode.valueOf(2));
                 value.set(DCSProxyConstant.JSON_KEY_PARAM, TextNode.valueOf(JsonUtil.serialize(param)));
 
@@ -281,7 +329,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
 
         String payload = message.getPayload();
         MultipartBody.Part part = MultipartBody.Part.createFormData(
-                "metadata",
+                PARAMETER_METADATA,
                 null,
                 RequestBody.create(okhttp3.MediaType.parse(MediaType.APPLICATION_JSON_UTF8_VALUE), payload)
         );
@@ -337,7 +385,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         }
     }
 
-    private final Supplier<DataPointMessage> successResponses = () -> {
+    private final Supplier<DataPointMessage> successDataPointResponses = () -> {
         DataPointMessage response = new DataPointMessage();
         response.setVersion(DEFAULT_VERSION);
         response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID);
@@ -345,13 +393,23 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         return response;
     };
 
-    private final Function<DataPointMessage, DataPointMessage> failedResponses = (origin) -> {
+    private final Function<DataPointMessage, DataPointMessage> unauthorizedResponses = (origin) -> {
         DataPointMessage response = new DataPointMessage();
-        response.setVersion(DEFAULT_VERSION);
+        response.setVersion(origin.getVersion());
         response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED);
         response.setId(origin.getId());
         response.setPath(DataPointConstant.DATA_POINT_PRIVATE_ERROR);
         response.setPayload(String.format("Couldn't obtain access token for %s", origin.getDeviceId()));
+        return response;
+    };
+
+    private final Function<DataPointMessage, DataPointMessage> emptyResponses = (origin) -> {
+        DataPointMessage response = new DataPointMessage();
+        response.setVersion(origin.getVersion());
+        response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNSUPPORTED_CONTENT_FORMAT);
+        response.setId(origin.getId());
+        response.setPath(DataPointConstant.DATA_POINT_PRIVATE_ERROR);
+        response.setPayload(String.format("No payload for %s", origin.getDeviceId()));
         return response;
     };
 

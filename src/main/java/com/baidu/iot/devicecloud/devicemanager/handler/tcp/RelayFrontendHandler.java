@@ -38,6 +38,7 @@ import java.net.InetSocketAddress;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_BEARER;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_DUEROS_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_PARAM;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_SN;
@@ -265,7 +266,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                                             .orElseGet(AccessTokenResponse::new).getAccessToken());
                     log.debug("Decorate access token for the initial package: {}", accessToken);
                     // append access token to param
-                    paramNode.set(PAM_PARAM_AUTHORIZATION, TextNode.valueOf("Bearer " + accessToken));
+                    paramNode.set(PAM_PARAM_AUTHORIZATION, TextNode.valueOf(PARAMETER_BEARER + accessToken));
                     if (!paramNode.has(PAM_PARAM_LINK_VERSION)) {
                         paramNode.set(PAM_PARAM_LINK_VERSION, IntNode.valueOf(2));
                     }

@@ -36,6 +36,10 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CONTENT_TYPE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_CID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_CONTENT_DISPOSITION;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_METADATA;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_NAME;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_EQUALITY_SIGN;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_SEMICOLON;
@@ -155,9 +159,9 @@ public class DirectiveProcessor {
             while (hasNextPart) {
                 Map<String, String> headers = getPartHeaders(multipartStream);
 
-                if (headers != null && headers.containsKey("content-disposition")) {
-                    String name = getPartName(headers.get("content-disposition"));
-                    if (!"metadata".equalsIgnoreCase(name)) {
+                if (headers != null && headers.containsKey(PARAMETER_CONTENT_DISPOSITION)) {
+                    String name = getPartName(headers.get(PARAMETER_CONTENT_DISPOSITION));
+                    if (!PARAMETER_METADATA.equalsIgnoreCase(name)) {
                         hasNextPart = multipartStream.readBoundary();
                         continue;
                     }
@@ -216,7 +220,7 @@ public class DirectiveProcessor {
             String items[] = contentDisposition.split(Pattern.quote(SPLITTER_SEMICOLON));
             if (items.length > 1) {
                 String[] nameKV = items[1].split(Pattern.quote(SPLITTER_EQUALITY_SIGN));
-                if (nameKV.length > 1 && "name".equalsIgnoreCase(StringUtils.trimAllWhitespace(nameKV[0])) && StringUtils.hasText(nameKV[1])) {
+                if (nameKV.length > 1 && PARAMETER_NAME.equalsIgnoreCase(StringUtils.trimAllWhitespace(nameKV[0])) && StringUtils.hasText(nameKV[1])) {
                     return StringUtils.trimTrailingCharacter(StringUtils.trimLeadingCharacter(nameKV[1], '"'), '"');
                 }
             }
@@ -237,7 +241,7 @@ public class DirectiveProcessor {
                             .path(DIRECTIVE_KEY_DIRECTIVE)
                             .path(DIRECTIVE_KEY_PAYLOAD)
                             .path(DIRECTIVE_KEY_PAYLOAD_URL).asText(),
-                    "cid:"
+                    PARAMETER_CID
             );
 
     private Function<JsonNode, String> getContentId =

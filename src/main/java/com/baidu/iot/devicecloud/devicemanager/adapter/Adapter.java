@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_METADATA;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DIRECTIVE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_DIALOG_ID;
@@ -50,7 +51,7 @@ public class Adapter {
                                 if (StringUtils.hasText(serialized)) {
                                     RequestBody multipartBody = new MultipartBody.Builder()
                                             .setType(MultipartBody.FORM)
-                                            .addPart(MultipartBody.Part.createFormData("metadata", serialized))
+                                            .addPart(MultipartBody.Part.createFormData(PARAMETER_METADATA, serialized))
                                             .build();
                                     Buffer buffer = new Buffer();
                                     multipartBody.writeTo(buffer);
