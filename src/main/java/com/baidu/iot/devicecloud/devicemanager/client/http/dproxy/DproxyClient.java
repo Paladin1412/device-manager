@@ -70,7 +70,7 @@ public class DproxyClient extends AbstractHttpClient {
             close(response);
         }
 
-        log.error("Auth failed, response from remote: {}", response);
+        log.error("Sending command failed, response from remote: {}", response);
         return null;
     }
 
