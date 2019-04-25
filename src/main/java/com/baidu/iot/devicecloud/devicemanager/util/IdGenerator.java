@@ -3,7 +3,6 @@ package com.baidu.iot.devicecloud.devicemanager.util;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -13,14 +12,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Slf4j
 public class IdGenerator {
-    /**
-     * The initial timestamp.
-     */
-    private static final AtomicInteger INITIAL_ID = new AtomicInteger(
-            new Random().nextInt(1 << 10)
-    );
+    private static final AtomicInteger INITIAL_ID = new AtomicInteger(0);
 
     public static int nextId() {
+        INITIAL_ID.compareAndSet(Integer.MAX_VALUE, 0);
         return INITIAL_ID.incrementAndGet();
     }
 
