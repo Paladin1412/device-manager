@@ -64,6 +64,7 @@ public class CommonConstant {
     public static final int MESSAGE_SUCCESS_CODE = 0;
     public static final String MESSAGE_FAILURE = "failure";
     public static final int MESSAGE_FAILURE_CODE = -1;
+    public static final int MESSAGE_UNEXPECTED_FAILURE_CODE = -2;
 
     public static final String EXTENSION_MP3 = ".mp3";
 }

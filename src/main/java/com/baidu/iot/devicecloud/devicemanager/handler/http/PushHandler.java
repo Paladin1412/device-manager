@@ -92,7 +92,16 @@ public class PushHandler {
                                     );
                                 }
                             });
-                });
+                })
+                .onErrorResume(
+                        e -> {
+                            String em = e.getMessage();
+                            log.error("Something wrong when pushing message to dh2: {}", em);
+                            e.printStackTrace();
+                            return ServerResponse.ok().body(
+                                    BodyInserters.fromObject(failedResponses.apply(message.getLogId(), em)));
+                        }
+                );
     }
 
     private int figureOutMethod(ServerRequest request) {

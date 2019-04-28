@@ -11,14 +11,18 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_BAD_REQUEST;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_ALIVE_INTERVAL;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CLT_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_LOG_ID;
@@ -30,6 +34,11 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HE
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_STREAMING_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_UNEXPECTED_FAILURE_CODE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.MessageType.BASE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.MessageType.DATA_POINT;
+import static com.baidu.iot.devicecloud.devicemanager.constant.MessageType.PUSH_MESSAGE;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedDataPointResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getFirst;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isCoapOk;
 
@@ -56,15 +65,27 @@ public class ReportHandler {
 
     @NonNull
     public Mono<ServerResponse> deal(ServerRequest request) {
+        String messageType = getFirst(request, HEADER_MESSAGE_TYPE);
+
         ServerResponse.BodyBuilder builder =
                 ServerResponse
                         .ok()
                         .contentType(MediaType.APPLICATION_JSON_UTF8)
                         .header("Accept", MediaType.APPLICATION_JSON_VALUE)
-                        .header(HEADER_MESSAGE_TYPE, getFirst(request, HEADER_MESSAGE_TYPE))
-                        .header(HEADER_MESSAGE_TIMESTAMP, Long.toString(System.currentTimeMillis()))
-                        .header(HEADER_CLT_ID, getFirst(request, HEADER_CLT_ID))
-                        .header(HEADER_SN, getFirst(request, HEADER_SN));
+                        .header(HEADER_MESSAGE_TIMESTAMP, Long.toString(System.currentTimeMillis()));
+
+        Optional.ofNullable(messageType).ifPresent(
+                t -> builder.header(HEADER_MESSAGE_TYPE, t)
+        );
+
+        Optional.ofNullable(getFirst(request, HEADER_CLT_ID)).ifPresent(
+                cktId -> builder.header(HEADER_CLT_ID, cktId)
+        );
+
+        Optional.ofNullable(getFirst(request, HEADER_SN)).ifPresent(
+                sn -> builder.header(HEADER_SN, sn)
+        );
+
         Optional.ofNullable(getFirst(request, HEADER_LOG_ID)).ifPresent(
                 logId -> builder.header(HEADER_LOG_ID, logId)
         );
@@ -78,11 +99,10 @@ public class ReportHandler {
         );
         return Mono.from(this.extractor.handle(request))
                 .filter(o -> o instanceof BaseMessage)
-                .flatMap(o -> Mono.just((BaseMessage) o))
+                .map(BaseMessage.class::cast)
                 .flatMap(this.reportService::handle)
                 .doOnNext(o -> {
                     if (o instanceof DataPointMessage) {
-
                         DataPointMessage message = (DataPointMessage) o;
                         if (isCoapOk.test(message)) {
                             builder
@@ -91,16 +111,46 @@ public class ReportHandler {
                         } else {
                             failed.accept(builder);
                         }
+
                     } else if (o instanceof BaseResponse) {
                         BaseResponse response = (BaseResponse) o;
-                        if (response.getCode() == 0) {
+                        if (response.getCode() == MESSAGE_SUCCESS_CODE) {
                             succeeded.accept(builder);
                         } else {
                             failed.accept(builder);
                         }
                     }
                 })
-                .flatMap(builder::syncBody);
+                .flatMap(builder::syncBody)
+                .onErrorResume(
+                        e -> {
+                            String em = e.getMessage();
+                            log.error("Something wrong when handling the reported message: {}", em);
+                            e.printStackTrace();
+                            unexpectedFailed.accept(builder);
+                            if (isDataPoint.test(messageType)) {
+                                return builder.body(
+                                        Mono.just(
+                                                failedDataPointResponses.get()
+                                                        .apply(COAP_RESPONSE_CODE_DUER_MSG_RSP_BAD_REQUEST, em)
+                                        ),
+                                        DataPointMessage.class
+                                );
+                            }
+                            return builder.build();
+                        }
+                );
+    }
+
+    private int parseMessageType(String messageType) {
+        int mt = BASE;
+        if (StringUtils.isEmpty(messageType)) {
+            return mt;
+        }
+        try {
+            mt = Integer.valueOf(messageType);
+        } catch (NumberFormatException ignore) {}
+        return mt;
     }
 
     private BiConsumer<ServerResponse.BodyBuilder, String> state =
@@ -111,4 +161,13 @@ public class ReportHandler {
 
     private Consumer<ServerResponse.BodyBuilder> failed =
             builder -> state.accept(builder, Integer.toString(MESSAGE_FAILURE_CODE));
+
+    private Consumer<ServerResponse.BodyBuilder> unexpectedFailed =
+            builder -> state.accept(builder, Integer.toString(MESSAGE_UNEXPECTED_FAILURE_CODE));
+
+    private Predicate<String> isDataPoint =
+            type -> {
+                int[] dataPointTypes = {DATA_POINT, PUSH_MESSAGE};
+                return Arrays.stream(dataPointTypes).anyMatch(t -> t == parseMessageType(type));
+    };
 }

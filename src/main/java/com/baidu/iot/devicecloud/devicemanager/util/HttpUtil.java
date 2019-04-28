@@ -26,6 +26,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE;
@@ -34,6 +35,8 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.ME
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_EQUALITY_SIGN;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_SEMICOLON;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_PRIVATE_ERROR;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_STATUS;
 
 /**
@@ -114,6 +117,22 @@ public class HttpUtil {
 
     public static Function<BaseMessage, BaseResponse> successResponsesWithMessage =
             (BaseMessage message) -> successResponses.apply(message != null ? message.getLogId() : null);
+
+    private static BiFunction<Integer, String, DataPointMessage> parseErrorDataPointMessage =
+            (code, content) -> {
+                DataPointMessage response = new DataPointMessage();
+                response.setVersion(DEFAULT_VERSION);
+                response.setCode(code);
+                response.setId(IdGenerator.nextId());
+                response.setPath(PathUtil.lookAfterPrefix(DATA_POINT_PRIVATE_ERROR));
+                if (StringUtils.hasText(content)) {
+                    response.setPayload(content);
+                }
+                return response;
+            };
+
+    public static Supplier<BiFunction<Integer, String, DataPointMessage>> failedDataPointResponses =
+            () -> parseErrorDataPointMessage;
 
     public static BiConsumer<ServerRequest, BaseMessage> assembleFromHeader =
             (request, message) -> {
