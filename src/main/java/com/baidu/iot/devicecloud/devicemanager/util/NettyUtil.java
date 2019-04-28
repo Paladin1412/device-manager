@@ -33,7 +33,7 @@ public class NettyUtil {
     }
 
     public static void writeAndFlush(Channel channel, Object msg) {
-        if (channel != null && channel.isActive()) {
+        if (channel != null && channel.isOpen()) {
             channel
                     .writeAndFlush(msg)
                     .addListeners((ChannelFutureListener) future -> {
@@ -53,6 +53,8 @@ public class NettyUtil {
                         }
                         log.debug("Writing and flushing message \n{}\nto {} successfully.", msgLog, String.valueOf(channel));
                     }, ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
+        } else {
+            log.warn("Connection {} has been reset by peer", channel);
         }
     }
 
@@ -68,10 +70,6 @@ public class NettyUtil {
 
     public static <T> Supplier<Consumer<T>> good2Go(Channel channel) {
         return () -> (T t) -> {
-            if (channel == null || !channel.isActive()) {
-                log.debug("{} has already been reset by peer");
-                return;
-            }
             if (channel.hasAttr(CONFIRMATION_STATE)
                     && ConfirmationStates.CONFIRMED == channel.attr(CONFIRMATION_STATE).get()) {
                 writeAndFlush(channel, t);
