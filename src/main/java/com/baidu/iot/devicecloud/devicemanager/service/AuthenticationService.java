@@ -40,8 +40,7 @@ import java.util.function.Supplier;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_ALIVE_INTERVAL;
-import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_PRIVATE_ERROR;
-import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedDataPointResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isDcsOk;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.projectExist;
 
@@ -123,7 +122,12 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                     }
                     return Mono.empty();
                 })
-                .switchIfEmpty(Mono.just(failedResponses.get()));
+                .switchIfEmpty(
+                        Mono.just(
+                                failedDataPointResponses.get()
+                                        .apply(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED, null)
+                        )
+                );
 
         return Mono.from(mono);
     }
@@ -179,15 +183,6 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
         response.setId(IdGenerator.nextId());
         response.setPath(PathUtil.lookAfterPrefix(DATA_POINT_ALIVE_INTERVAL));
         response.setPayload(Integer.toString(aliveInterval));
-        return response;
-    };
-
-    private final Supplier<DataPointMessage> failedResponses = () -> {
-        DataPointMessage response = new DataPointMessage();
-        response.setVersion(DEFAULT_VERSION);
-        response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED);
-        response.setId(IdGenerator.nextId());
-        response.setPath(PathUtil.lookAfterPrefix(DATA_POINT_PRIVATE_ERROR));
         return response;
     };
 
