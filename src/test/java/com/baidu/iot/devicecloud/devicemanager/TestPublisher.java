@@ -1,21 +1,25 @@
 package com.baidu.iot.devicecloud.devicemanager;
 
+import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import org.junit.Before;
 import org.junit.Test;
+import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -89,5 +93,36 @@ public class TestPublisher {
         Flux.fromIterable(Collections.emptyList())
                 .doFinally(signalType -> System.out.println(signalType.toString()))
                 .subscribe(i -> System.out.println("received: " + i));
+    }
+
+    @Test
+    public void testFlux2Mono() {
+        Flux flux = Flux.just(1, 2, 3);
+        Mono mono = Flux.push(fluxSink -> flux.subscribe(new BaseSubscriber<Integer>() {
+            @Override
+            protected void hookOnNext(Integer value) {
+                fluxSink.next(value);
+            }
+
+            @Override
+            protected void hookOnComplete() {
+                fluxSink.complete();
+            }
+        })).collectList()
+                .map(list -> {
+                    list.add(4);
+                    return list;
+                })
+        .doFinally(signalType -> System.out.println("Finally"))
+        .switchIfEmpty(Mono.empty());
+
+        mono.subscribe(System.out::println);
+    }
+
+    @Test
+    public void testFilterList() {
+        List<Integer> list = new ArrayList<>(Arrays.asList(1,2,3,4,5,6,7,8,9,10));
+        list.removeIf(number -> number%2 == 0);
+        System.out.println(list);
     }
 }
