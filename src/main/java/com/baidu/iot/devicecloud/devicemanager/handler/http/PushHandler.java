@@ -93,7 +93,13 @@ public class PushHandler {
                                 if (baseResponse.getCode() == 0) {
                                     // waiting the result for 5 seconds.
                                     Mono<BaseResponse> responseMono = pushService.check(message, key, idList)
-                                            .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(message.getLogId(), "Waiting ack timeout")));
+                                            .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(message.getLogId(), "Waiting ack timeout")))
+                                            .onErrorResume(
+                                                    e -> {
+                                                        log.error("Something wrong when checking the acknowledges, caused by: {}", e);
+                                                        return Mono.just(failedResponses.apply(message.getLogId(), e.getMessage()));
+                                                    }
+                                            );
 
                                     return ServerResponse.ok().body(responseMono, BaseResponse.class);
                                 } else {

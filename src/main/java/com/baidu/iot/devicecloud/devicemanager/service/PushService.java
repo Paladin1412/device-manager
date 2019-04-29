@@ -229,7 +229,7 @@ public class PushService implements InitializingBean {
                 if (ack != null) {
                     int id = ack.getId();
                     if (isCoapOk.test(ack) && stub.contains(id)) {
-                        stub.remove(id);
+                        stub.removeIf(i -> i == id);
                     }
                     if (stub.isEmpty()) {
                         sink.success(successResponsesWithMessage.apply(message));
@@ -242,6 +242,11 @@ public class PushService implements InitializingBean {
             @Override
             protected void hookOnComplete() {
                 sink.success();
+            }
+
+            @Override
+            protected void hookOnError(Throwable throwable) {
+                sink.error(throwable);
             }
         }));
     }
