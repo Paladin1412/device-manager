@@ -10,6 +10,7 @@ import com.baidu.iot.devicecloud.devicemanager.client.http.redirectclient.Redire
 import com.baidu.iot.devicecloud.devicemanager.client.http.ttsproxyclient.TtsProxyClient;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
+import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -288,7 +289,7 @@ public class PushService implements InitializingBean {
                                         String ttsProxyUrl = ttsProxyClient.getTTSProxyURL();
                                         String finalUrl =
                                                 StringUtils.applyRelativePath(
-                                                        ttsProxyUrl,
+                                                        PathUtil.lookAfterSuffix(ttsProxyUrl),
                                                         String.format("%s%s", audioKey, EXTENSION_MP3)
                                                 );
                                         finalPayloadNode.set(DIRECTIVE_KEY_PAYLOAD_URL, TextNode.valueOf(finalUrl));

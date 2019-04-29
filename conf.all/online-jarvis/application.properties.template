@@ -20,6 +20,7 @@ dcs.proxy.address.evt=
 tts.proxy.bns=unknown_bns_ttsProxy
 tts.proxy.api=10.117.80.48:8997
 #tts.proxy.api=127.0.0.1:8099
+tts.proxy.domain=http://res.iot.baidu.com
 tts.proxy.path=cached/tts/v1/
 
 dh.bns=unknown_bns_dh

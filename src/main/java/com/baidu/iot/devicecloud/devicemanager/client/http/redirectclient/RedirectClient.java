@@ -4,6 +4,7 @@ import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.client.http.AbstractHttpClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.callback.CallbackFuture;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
+import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -79,14 +80,14 @@ public class RedirectClient extends AbstractHttpClient {
     private String getFullPath(String ip, String port, String[] path) {
         String domainAddress = String.format("%s%s:%s", dmScheme, ip, port);
         return StringUtils.applyRelativePath(
-                domainAddress,
+                PathUtil.lookAfterSuffix(domainAddress),
                 getFullRelativePath(path)
         );
     }
 
     private String getFullRelativePath(String[] path) {
         return StringUtils.applyRelativePath(
-                DM_ROOT,
+                PathUtil.lookAfterSuffix(DM_ROOT),
                 StringUtils.arrayToDelimitedString(path, SPLITTER_URL)
         );
     }
