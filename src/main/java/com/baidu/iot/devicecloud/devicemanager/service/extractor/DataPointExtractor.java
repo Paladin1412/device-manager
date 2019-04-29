@@ -3,7 +3,6 @@ package com.baidu.iot.devicecloud.devicemanager.service.extractor;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
-import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
@@ -37,7 +36,7 @@ public class DataPointExtractor extends AbstractLinkableExtractor {
         return request.body(BodyExtractors.toMono(JsonNode.class))
                 .flatMap(requestBody -> {
                     Optional.ofNullable(requestBody.get(CommonConstant.PARAMETER_ID)).ifPresent(
-                            id -> parsed.setId(id.asInt(IdGenerator.nextId()))
+                            id -> parsed.setId(id.asInt())
                     );
                     Optional.ofNullable(requestBody.get(CommonConstant.PARAMETER_VERSION)).ifPresent(
                              version -> parsed.setVersion(version.asInt(DEFAULT_VERSION))

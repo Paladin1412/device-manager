@@ -27,7 +27,7 @@ public class DefaultService extends AbstractLinkableHandlerAdapter<BaseMessage> 
     Mono<Object> work(BaseMessage message) {
         return Mono.justOrEmpty(message)
                 .doOnNext(msg -> log.info(msg.toString()))
-                .switchIfEmpty(Mono.error(new ServerWebInputException("No message")))
+                .switchIfEmpty(Mono.defer(() ->Mono.error(new ServerWebInputException("No message"))))
                 .flatMap(msg -> Mono.just(successResponsesWithMessage.apply(msg)));
     }
 }

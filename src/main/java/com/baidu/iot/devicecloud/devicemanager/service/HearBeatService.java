@@ -40,7 +40,7 @@ public class HearBeatService extends AbstractLinkableHandlerAdapter<BaseMessage>
                             this.accessTokenService.refreshAccessToken(message);
                         })
                         .flatMap(msg -> Mono.just(successResponsesWithMessage.apply(msg)))
-                        .switchIfEmpty(Mono.error(new ServerWebInputException("No heartbeat")))
+                        .switchIfEmpty(Mono.defer(() ->Mono.error(new ServerWebInputException("No heartbeat"))))
         );
     }
 }

@@ -35,7 +35,7 @@ public class ReportMessageExtractor implements ReactorDispatcherHandler<ServerRe
     @Override
     public Mono<Object> handle(ServerRequest serverRequest) {
         return Mono.from(checkHeaders(serverRequest))
-                .switchIfEmpty(Mono.from(this.extractor.handle(serverRequest)));
+                .switchIfEmpty(Mono.defer(() ->Mono.from(this.extractor.handle(serverRequest))));
     }
 
     private Mono<Object> checkHeaders(ServerRequest request) {

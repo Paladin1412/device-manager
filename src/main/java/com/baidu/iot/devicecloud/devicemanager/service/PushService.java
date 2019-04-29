@@ -172,7 +172,7 @@ public class PushService implements InitializingBean {
                     }
                     return Mono.empty();
                 })
-                .switchIfEmpty(Mono.just(failedResponses.apply(message.getLogId(), "Pushing dh failed")))
+                .switchIfEmpty(Mono.defer(() ->Mono.just(failedResponses.apply(message.getLogId(), "Pushing dh failed"))))
         );
     }
 
