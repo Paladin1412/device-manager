@@ -3,6 +3,7 @@ package com.baidu.iot.devicecloud.devicemanager.handler.http;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
+import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant;
 import com.baidu.iot.devicecloud.devicemanager.service.PushService;
 import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.baidu.iot.devicecloud.devicemanager.adapter.Adapter.try2appendDialogueFinished;
@@ -61,8 +63,16 @@ public class PushHandler {
     public Mono<ServerResponse> deal(ServerRequest request) {
         BaseMessage message = new BaseMessage();
         assembleFromHeader.accept(request, message);
-        request.queryParam("clt_id").ifPresent(message::setCltId);
+        request.queryParam("clt_id").ifPresent(clt_id -> {
+            message.setCltId(clt_id);
+            String[] items = clt_id.split(Pattern.quote(CommonConstant.SPLITTER_DOLLAR));
+            if (items.length > 1) {
+                message.setProductId(items[0]);
+                message.setDeviceId(items[1]);
+            }
+        });
         request.queryParam("msgid").ifPresent(message::setLogId);
+
         int method = figureOutMethod(request);
         // pushing needs ack
         message.setNeedAck(true);
@@ -170,6 +180,7 @@ public class PushHandler {
         assembled.setCltId(origin.getCltId());
         assembled.setLogId(origin.getLogId());
         assembled.setSn(origin.getSn());
+        assembled.setDeviceId(origin.getDeviceId());
         if (StringUtils.hasText(key)) {
             ObjectNode misc = JsonUtil.createObjectNode();
             misc.set(MESSAGE_ACK_NEED, BooleanNode.getTrue());

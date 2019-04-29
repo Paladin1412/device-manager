@@ -39,6 +39,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.MessageType.BASE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.MessageType.DATA_POINT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.MessageType.PUSH_MESSAGE;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedDataPointResponses;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getFirst;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isCoapOk;
 
@@ -66,6 +67,7 @@ public class ReportHandler {
     @NonNull
     public Mono<ServerResponse> deal(ServerRequest request) {
         String messageType = getFirst(request, HEADER_MESSAGE_TYPE);
+        String logId = getFirst(request, HEADER_LOG_ID);
 
         ServerResponse.BodyBuilder builder =
                 ServerResponse
@@ -86,8 +88,8 @@ public class ReportHandler {
                 sn -> builder.header(HEADER_SN, sn)
         );
 
-        Optional.ofNullable(getFirst(request, HEADER_LOG_ID)).ifPresent(
-                logId -> builder.header(HEADER_LOG_ID, logId)
+        Optional.ofNullable(logId).ifPresent(
+                log -> builder.header(HEADER_LOG_ID, log)
         );
 
         Optional.ofNullable(getFirst(request, HEADER_STANDBY_DEVICE_ID)).ifPresent(
@@ -137,7 +139,12 @@ public class ReportHandler {
                                         DataPointMessage.class
                                 );
                             }
-                            return builder.build();
+                            return builder.body(
+                                    Mono.just(
+                                            failedResponses.apply(logId, em)
+                                    ),
+                                    BaseResponse.class
+                            );
                         }
                 );
     }

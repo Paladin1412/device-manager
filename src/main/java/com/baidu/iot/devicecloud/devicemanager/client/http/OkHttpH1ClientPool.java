@@ -17,9 +17,9 @@ public class OkHttpH1ClientPool {
         OkHttpClient.Builder builder = new OkHttpClient.Builder();
         ourInstance = builder
                 .retryOnConnectionFailure(true)
-                .readTimeout(5000,    TimeUnit.MILLISECONDS)
-                .writeTimeout(5000,   TimeUnit.MILLISECONDS)
-                .connectTimeout(10000, TimeUnit.MILLISECONDS)
+                .readTimeout(4000, TimeUnit.MILLISECONDS)
+                .writeTimeout(4000, TimeUnit.MILLISECONDS)
+                .connectTimeout(4000, TimeUnit.MILLISECONDS)
                 .connectionPool(new ConnectionPool(200, 5, TimeUnit.MINUTES))
                 .build();
     }
