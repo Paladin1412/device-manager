@@ -69,7 +69,7 @@ public class HttpUtil {
                             && resp.get(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE;
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Checking if the dcs response ok failed, caused by: {}", e);
             }
         }
         return false;

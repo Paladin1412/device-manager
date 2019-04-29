@@ -63,7 +63,7 @@ public class Adapter {
                                     return new TlvMessage(type, vlen, content);
                                 }
                             } catch (Exception e) {
-                                e.printStackTrace();
+                                log.error("Adapting directives from json node to tlv failed, caused by: {}", e);
                             }
                             return null;
                         }
@@ -90,7 +90,7 @@ public class Adapter {
                                 log.debug("Adapted ASR directive:\n{}", assembled);
                                 return new TlvMessage(type, vlen, bytes);
                             } catch (Exception e) {
-                                e.printStackTrace();
+                                log.error("Adapting directives from json node to tlv failed, caused by: {}", e);
                             }
                             return null;
                         }
@@ -138,8 +138,7 @@ public class Adapter {
                     directives.size() + 1
             ));
         } catch (Exception e) {
-            log.error("Trying to append DialogueFinished at last failed: {}", e.getMessage());
-            e.printStackTrace();
+            log.error("Trying to append DialogueFinished at last failed, caused by: {}", e);
         }
     }
 }

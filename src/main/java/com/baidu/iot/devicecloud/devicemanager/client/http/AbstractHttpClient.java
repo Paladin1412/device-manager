@@ -3,6 +3,7 @@ package com.baidu.iot.devicecloud.devicemanager.client.http;
 
 import com.baidu.iot.devicecloud.devicemanager.client.http.callback.CallbackFuture;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
@@ -22,6 +23,7 @@ import java.util.concurrent.CompletableFuture;
  *
  * @author <a href="mailto:yaogang AT baidu DOT com">Yao Gang</a>
  */
+@Slf4j
 public abstract class AbstractHttpClient implements IHttpClient {
     private OkHttpClient client;
 
@@ -34,7 +36,7 @@ public abstract class AbstractHttpClient implements IHttpClient {
         try {
             return client.newCall(request).execute();
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Sending a sync call failed, caused by: {}", e);
         }
         return null;
     }

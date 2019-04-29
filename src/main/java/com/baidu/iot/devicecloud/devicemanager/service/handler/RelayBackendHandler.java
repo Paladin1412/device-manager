@@ -99,9 +99,10 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        Channel channel = ctx.channel();
+        log.error("Caught an exception on the event-link dcs channel({}), caused by: {}", channel, cause);
         clear();
-        cause.printStackTrace();
-        closeOnFlush(ctx.channel());
+        closeOnFlush(channel);
     }
 
     private void clear() {

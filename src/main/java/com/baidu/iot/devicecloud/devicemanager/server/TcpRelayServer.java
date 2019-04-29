@@ -132,7 +132,7 @@ public class TcpRelayServer {
                 }
             });
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            log.error("The relay server has been interrupted: {}", e);
         }
     }
 
@@ -141,7 +141,7 @@ public class TcpRelayServer {
             try {
                 channelFuture.channel().closeFuture().sync();
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                log.error("Stopping the relay server failed, caused by: {}", e);
             }
         }
 

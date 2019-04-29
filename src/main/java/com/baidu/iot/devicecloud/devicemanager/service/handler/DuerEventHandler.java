@@ -205,7 +205,6 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         try {
             optAccessToken = cache.get(key, () -> loadAccessToken(message));
         } catch (Exception e) {
-            e.printStackTrace();
             return Mono.error(e);
         }
         if (!optAccessToken.isPresent()) {
@@ -318,7 +317,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                     long vlen = bytes.length;
                     return new TlvMessage(TlvConstant.TYPE_UPSTREAM_INIT, vlen, BinaryNode.valueOf(bytes));
                 } catch (JsonProcessingException e) {
-                    e.printStackTrace();
+                    log.error("Assembling the init package failed, caused by: {}", e);
                 }
                 return null;
             };
@@ -356,7 +355,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             log.debug("multipartBody:\n{}", new String(content, Charsets.UTF_8));
             return new TlvMessage(TlvConstant.TYPE_UPSTREAM_DUMI, vlen, content);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Assembling the data package failed, caused by: {}", e);
         }
         return null;
     };
@@ -369,7 +368,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         try {
             return new TlvMessage(TlvConstant.TYPE_UPSTREAM_FINISH, vlen, BinaryNode.valueOf(JsonUtil.writeAsBytes(value)));
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            log.error("Assembling the finish package failed, caused by: {}", e);
             return null;
         }
     };

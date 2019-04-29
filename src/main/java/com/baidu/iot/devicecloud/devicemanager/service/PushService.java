@@ -353,7 +353,7 @@ public class PushService implements InitializingBean {
             }
             return dataBuffer.slice(dataBuffer.readPosition(), dataBuffer.readableByteCount());
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Reading the input stream as a data buffer failed, caused by: {}", e);
         } finally {
             try {
                 in.close();

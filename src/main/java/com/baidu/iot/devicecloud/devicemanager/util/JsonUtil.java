@@ -87,8 +87,8 @@ public class JsonUtil {
     public static JsonNode readTree(InputStream in) {
         try {
             return objectMapper.readTree(in);
-        } catch (IOException ignore) {
-            ignore.printStackTrace();
+        } catch (IOException e) {
+            log.error("Reading input stream as tree failed, caused by: {}", e);
         }
         return NullNode.getInstance();
     }

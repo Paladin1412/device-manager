@@ -116,7 +116,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                             return Mono.just(successResponses.get());
                         }
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        return Mono.error(e);
                     } finally {
                         HttpUtil.close(response);
                     }

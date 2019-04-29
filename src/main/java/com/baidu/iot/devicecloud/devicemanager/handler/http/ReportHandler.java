@@ -127,8 +127,7 @@ public class ReportHandler {
                 .onErrorResume(
                         e -> {
                             String em = e.getMessage();
-                            log.error("Something wrong when handling the reported message: {}", em);
-                            e.printStackTrace();
+                            log.error("Something wrong when handling the reported message, caused by: {}", e);
                             unexpectedFailed.accept(builder);
                             if (isDataPoint.test(messageType)) {
                                 return builder.body(

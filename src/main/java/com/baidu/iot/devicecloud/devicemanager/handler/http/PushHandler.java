@@ -105,11 +105,9 @@ public class PushHandler {
                 })
                 .onErrorResume(
                         e -> {
-                            String em = e.getMessage();
-                            log.error("Something wrong when pushing message to dh2: {}", em);
-                            e.printStackTrace();
+                            log.error("Something wrong when pushing message to dh2, caused by: {}", e);
                             return ServerResponse.ok().body(
-                                    BodyInserters.fromObject(failedResponses.apply(message.getLogId(), em)));
+                                    BodyInserters.fromObject(failedResponses.apply(message.getLogId(), e.getMessage())));
                         }
                 );
     }

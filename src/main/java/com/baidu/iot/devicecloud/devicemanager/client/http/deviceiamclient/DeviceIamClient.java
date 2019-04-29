@@ -88,7 +88,7 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Auth failed, caused by: {}", e);
         } finally {
             close(response);
         }
@@ -164,7 +164,7 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Getting access token from di failed, caused by: {}", e);
         } finally {
             close(response);
         }
@@ -193,7 +193,7 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
                 urlBuilder = UriComponentsBuilder.fromHttpUrl(httpUrl);
                 JsonUtil.appendAsQueryParams(urlBuilder, params);
             } catch (Exception e) {
-                e.printStackTrace();
+                log.error("Appending query params failed, caused by:{}", e);
                 return null;
             }
             requestBuilder

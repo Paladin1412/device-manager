@@ -67,7 +67,7 @@ public class TtsService {
                         }
                     }
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    log.error("Requesting tts in a sync way failed, caused by: {}", e);
                 } finally {
                     response.close();
                 }

@@ -56,7 +56,6 @@ public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMess
                 }
                 sink.success(dependentResponse.apply(message, response));
             } catch (Exception e) {
-                e.printStackTrace();
                 sink.error(e);
             } finally {
                 HttpUtil.close(response);

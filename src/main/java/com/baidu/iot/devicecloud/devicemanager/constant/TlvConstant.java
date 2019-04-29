@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -19,6 +20,7 @@ import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.parseIntTo2
  *
  * @author <a href="mailto:yaogang AT baidu DOT com">Yao Gang</a>
  */
+@Slf4j
 public class TlvConstant {
     public static final int TYPE_UPSTREAM_INIT = 0X0001;
     public static final int TYPE_UPSTREAM_ASR = 0X0002;
@@ -48,7 +50,7 @@ public class TlvConstant {
         try {
             bytes = writer.writeValueAsBytes(status);
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            log.error("Writing value as bytes failed, caused by: {}", e);
             bytes = "{\"status\":0}".getBytes();
         }
         int length = bytes.length;
@@ -66,7 +68,7 @@ public class TlvConstant {
         try {
             bytes = writer.writeValueAsBytes(status);
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            log.error("Writing value as bytes failed, caused by: {}", e);
             bytes = "{\"status\":0}".getBytes();
         }
         int length = bytes.length;

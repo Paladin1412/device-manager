@@ -177,7 +177,7 @@ public class DirectiveProcessor {
                 hasNextPart = multipartStream.readBoundary();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Getting metadata of directives from the multiple stream failed, caused by: {}", e);
         }
         return directives;
     }
