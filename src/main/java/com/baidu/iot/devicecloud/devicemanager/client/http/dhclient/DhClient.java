@@ -23,6 +23,7 @@ import org.springframework.util.StringUtils;
 import javax.validation.constraints.NotNull;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
+import java.util.Optional;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
 
@@ -59,10 +60,11 @@ public class DhClient extends AbstractHttpClient {
                 .header(HttpHeaders.CONTENT_TYPE, org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
                 .header(CommonConstant.HEADER_MESSAGE_TYPE, Integer.toString(MessageType.PUSH_MESSAGE))
                 .header(CommonConstant.HEADER_MESSAGE_TIMESTAMP, Long.toString(System.currentTimeMillis()))
-                .header(CommonConstant.HEADER_CLT_ID, message.getCltId())
-                .header(CommonConstant.HEADER_SN, message.getSn())
-                .header(CommonConstant.HEADER_LOG_ID, message.getLogId())
                 .post(requestBody);
+
+        Optional.ofNullable(message.getCltId()).ifPresent(message::setCltId);
+        Optional.ofNullable(message.getSn()).ifPresent(message::setSn);
+        Optional.ofNullable(message.getLogId()).ifPresent(message::setLogId);
 
         return builder.build();
     }
