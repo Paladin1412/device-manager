@@ -113,7 +113,6 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
     private final PushService pushService;
     private final DirectiveProcessor directiveProcessor;
 
-    private Channel outboundChannel;
     public Cache<String, Optional<String>> cache;
     private ChannelPoolMap<InetSocketAddress, SimpleChannelPool> poolMap;
     private ExecutorService commonSideExecutor;
@@ -229,10 +228,6 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
     }
 
     private Mono<BaseResponse> doWork(DataPointMessage message, String accessToken) {
-        // all tlv messages those should be sent to dcs
-        final UnicastProcessor<TlvMessage> requestQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
-        // all tlv messages those received from dcs
-        final UnicastProcessor<TlvMessage> responseQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
         // Initializing a new connection to DCS proxy for each client connected to the relay server til the client has report the first initial package
         log.debug("The relay server is connecting to dcs.");
         InetSocketAddress assigned;
@@ -249,18 +244,22 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         if (assigned == null) {
             return Mono.error(new IllegalStateException("Couldn't find any dcs address"));
         }
+        // all tlv messages those should be sent to dcs
+        final UnicastProcessor<TlvMessage> requestQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
+        // all tlv messages those received from dcs
+        final UnicastProcessor<TlvMessage> responseQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
         final SimpleChannelPool pool = poolMap.get(assigned);
         Future<Channel> f = pool.acquire();
         f.addListener((FutureListener<Channel>) channelFuture -> {
-            if (f.isSuccess()) {
-                outboundChannel = f.getNow();
-                ChannelPipeline pipelines = outboundChannel.pipeline();
+            if (channelFuture.isSuccess()) {
+                final Channel channel = channelFuture.getNow();
+                ChannelPipeline pipelines = channel.pipeline();
                 if (pipelines.get(RELAY_BACK_HANDLER) != null) {
                     pipelines.remove(RELAY_BACK_HANDLER);
                 }
                 pipelines.addLast(RELAY_BACK_HANDLER, new RelayBackendHandler(requestQueue, responseQueue));
-                writeAndFlush(outboundChannel, initPackage.apply(message, accessToken));
-                outboundChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
+                writeAndFlush(channel, initPackage.apply(message, accessToken));
+                channel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
 
                 TlvMessage data = dataPackage.apply(message);
                 if (data != null) {
@@ -268,6 +267,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                 }
                 requestQueue.onNext(finishPackage.apply(message));
                 requestQueue.onComplete();
+                pool.release(channel);
             }
         });
 
@@ -287,10 +287,10 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                 .collectList()
                 .flatMap(list -> pushService.push(deal(list, message)))
                 .doFinally(signalType -> {
+                    log.debug("Finally, refreshing the access token, signalType={}", signalType);
                     accessTokenService.refreshAccessToken(message);
-                    pool.release(outboundChannel);
                 })
-                .switchIfEmpty(Mono.just(failedResponses.apply(message.getLogId(), "Nothing to respond")));
+                .switchIfEmpty(Mono.defer(() ->Mono.just(failedResponses.apply(message.getLogId(), "Nothing to respond"))));
     }
 
     private final BiFunction<DataPointMessage, String, TlvMessage> initPackage =
