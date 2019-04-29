@@ -19,7 +19,7 @@ public class IdGenerator {
         return INITIAL_ID.incrementAndGet();
     }
 
-    public static int projectId(String cuid) {
+    static int projectId(String cuid) {
         if (StringUtils.hasText(cuid) && cuid.length() > 4) {
             try {
                 return Integer.parseInt(cuid.substring(0, 4), 16);

@@ -216,13 +216,10 @@ public class HttpUtil {
     }
 
     public static boolean projectExist(final String cuid) {
-        if (StringUtils.hasText(cuid) && cuid.length() > 4) {
-            int projectId = Integer.parseInt(cuid.substring(0, 4), 16);
-            return DproxyClientProvider
-                    .getInstance()
-                    .exists(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectId);
-        }
-        return false;
+        int projectId = IdGenerator.projectId(cuid);
+        return DproxyClientProvider
+                .getInstance()
+                .exists(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectId);
     }
 
     public static boolean refreshAccessTokenRedis(final String cuid, long expire) {
@@ -234,14 +231,11 @@ public class HttpUtil {
 
     @Nullable
     public static ProjectInfo getProjectInfoFromRedis(final String cuid) {
-        if (StringUtils.hasText(cuid) && cuid.length() > 4) {
-            int projectId = Integer.parseInt(cuid.substring(0, 4), 16);
-            return DproxyClientProvider
-                    .getInstance()
-                    .hget(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectId,
-                            CommonConstant.PROJECT_INFO, ProjectInfo.class);
-        }
-        return null;
+        int projectId = IdGenerator.projectId(cuid);
+        return DproxyClientProvider
+                .getInstance()
+                .hget(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectId,
+                        CommonConstant.PROJECT_INFO, ProjectInfo.class);
     }
 
     /**
