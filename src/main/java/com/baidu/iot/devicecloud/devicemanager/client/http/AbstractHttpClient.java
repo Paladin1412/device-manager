@@ -50,7 +50,6 @@ public abstract class AbstractHttpClient implements IHttpClient {
     @Override
     public CompletableFuture<Response> sendAsyncWithFuture(Request request, CallbackFuture callback) {
         Call call = client.newCall(request);
-        call.timeout().clearTimeout();
         call.enqueue(callback);
         return callback;
     }

@@ -40,6 +40,7 @@ import java.util.function.Supplier;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_ALIVE_INTERVAL;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedDataPointResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isDcsOk;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.projectExist;
@@ -104,32 +105,31 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
         // update bns
         msg.setBns(localServerInfo.toString());
 
-        Mono mono = Mono.justOrEmpty(auth(msg))
+        return Mono.from(Mono.justOrEmpty(auth(msg))
                 .filter(deviceResource -> deviceResource != null && StringUtils.hasText(deviceResource.getAccessToken()))
                 .doOnNext(this::writeProjectInfoToDproxy)
-                .flatMap(deviceResource -> {
-                    Response response = null;
-                    try {
-                        response = informDcsProxy(deviceResource, msg);
-                        if (response != null && isDcsOk.test(response)) {
-                            assignAddr(response, deviceResource);
-                            return Mono.just(successResponses.get());
-                        }
-                    } catch (Exception e) {
-                        return Mono.error(e);
-                    } finally {
-                        HttpUtil.close(response);
-                    }
-                    return Mono.empty();
-                })
+                .flatMap(deviceResource ->
+                        Mono.fromFuture(informDcsProxyAsync(deviceResource, msg))
+                        .flatMap(response -> {
+                            try {
+                                if (response != null && isDcsOk.test(response)) {
+                                    assignAddr(response, deviceResource);
+                                    return Mono.just(successResponses.get());
+                                }
+                            } finally {
+                                HttpUtil.close(response);
+                            }
+                            return Mono.empty();
+                        }))
+                .onErrorResume(Mono::error)
                 .switchIfEmpty(
-                        Mono.just(
-                                failedDataPointResponses.get()
-                                        .apply(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED, null)
+                        Mono.defer(() ->
+                                Mono.just(
+                                        failedDataPointResponses.get()
+                                                .apply(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED, null)
+                                )
                         )
-                );
-
-        return Mono.from(mono);
+                ));
     }
 
     private Optional<DeviceResource> auth(final AuthorizationMessage message) {
@@ -147,6 +147,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
     }
 
     // TODO: if dcs respond a directive, then it should be sent to device
+    @SuppressWarnings("unused")
     private Response informDcsProxy(DeviceResource deviceResource, BaseMessage message) {
         return dcsProxyClient.adviceUserState(message,
                 deviceResource.getAccessToken(), DCSProxyConstant.USER_STATE_CONNECTED);
@@ -179,6 +180,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
 
     private final Supplier<DataPointMessage> successResponses = () -> {
         DataPointMessage response = new DataPointMessage();
+        response.setVersion(DEFAULT_VERSION);
         response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID);
         response.setId(IdGenerator.nextId());
         response.setPath(PathUtil.lookAfterPrefix(DATA_POINT_ALIVE_INTERVAL));
