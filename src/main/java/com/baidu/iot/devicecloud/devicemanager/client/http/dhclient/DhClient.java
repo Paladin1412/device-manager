@@ -25,6 +25,9 @@ import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.Optional;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CLT_ID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_LOG_ID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_SN;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
 
 /**
@@ -62,9 +65,15 @@ public class DhClient extends AbstractHttpClient {
                 .header(CommonConstant.HEADER_MESSAGE_TIMESTAMP, Long.toString(System.currentTimeMillis()))
                 .post(requestBody);
 
-        Optional.ofNullable(message.getCltId()).ifPresent(message::setCltId);
-        Optional.ofNullable(message.getSn()).ifPresent(message::setSn);
-        Optional.ofNullable(message.getLogId()).ifPresent(message::setLogId);
+        Optional.ofNullable(message.getCltId()).ifPresent(
+                cltId -> builder.header(HEADER_CLT_ID, cltId)
+        );
+        Optional.ofNullable(message.getSn()).ifPresent(
+                sn -> builder.header(HEADER_SN, sn)
+        );
+        Optional.ofNullable(message.getLogId()).ifPresent(
+                logId -> builder.header(HEADER_LOG_ID, logId)
+        );
 
         return builder.build();
     }

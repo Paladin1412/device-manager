@@ -177,7 +177,7 @@ public class PushHandler {
         assembled.setPayload(directiveJson.toString());
         assembled.setCltId(origin.getCltId());
         assembled.setLogId(origin.getLogId());
-        assembled.setSn(origin.getSn());
+        assembled.setSn(Optional.ofNullable(origin.getSn()).orElseGet(origin::getLogId));
         assembled.setDeviceId(origin.getDeviceId());
         if (StringUtils.hasText(key)) {
             ObjectNode misc = JsonUtil.createObjectNode();
