@@ -61,7 +61,7 @@ public class DproxyClient extends AbstractHttpClient {
                 return commandInfo;
             }
         } catch (Exception e) {
-            log.error("Sending dproxy command failed, caused by: {}", e);
+            log.error("Sending dproxy command failed", e);
             if (e instanceof SocketTimeoutException) {
                 close(response);
                 throw new RetryException(e.getMessage());

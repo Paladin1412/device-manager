@@ -74,7 +74,7 @@ public class AddressCache {
         try {
             initSocketAddress = cache.get(getDcsAddressKey(cuid));
         } catch (ExecutionException e) {
-            log.error("Getting dcs tcp address failed, caused by: {}", e);
+            log.error("Getting dcs tcp address failed", e);
         }
         if (initSocketAddress == null) {
             initSocketAddress = BnsCache.getRandomInetAddress(DCS_PROXY_BNS);

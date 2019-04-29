@@ -36,7 +36,7 @@ public abstract class AbstractHttpClient implements IHttpClient {
         try {
             return client.newCall(request).execute();
         } catch (IOException e) {
-            log.error("Sending a sync call failed, caused by: {}", e);
+            log.error("Sending a sync call failed", e);
         }
         return null;
     }

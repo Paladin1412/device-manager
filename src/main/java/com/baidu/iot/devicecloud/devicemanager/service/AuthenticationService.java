@@ -141,7 +141,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                 return Optional.ofNullable(client.auth(message));
             });
         } catch (Exception e) {
-            log.error("Something goes wrong: {}", e);
+            log.error("Obtaining the access token failed", e);
             return Optional.empty();
         }
     }

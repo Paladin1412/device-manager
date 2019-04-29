@@ -50,7 +50,7 @@ public class TlvConstant {
         try {
             bytes = writer.writeValueAsBytes(status);
         } catch (JsonProcessingException e) {
-            log.error("Writing value as bytes failed, caused by: {}", e);
+            log.error("Writing value as bytes failed", e);
             bytes = "{\"status\":0}".getBytes();
         }
         int length = bytes.length;
@@ -68,7 +68,7 @@ public class TlvConstant {
         try {
             bytes = writer.writeValueAsBytes(status);
         } catch (JsonProcessingException e) {
-            log.error("Writing value as bytes failed, caused by: {}", e);
+            log.error("Writing value as bytes failed", e);
             bytes = "{\"status\":0}".getBytes();
         }
         int length = bytes.length;

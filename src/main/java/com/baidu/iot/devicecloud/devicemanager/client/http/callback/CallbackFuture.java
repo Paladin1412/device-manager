@@ -19,7 +19,8 @@ public class CallbackFuture extends CompletableFuture<Response> implements Callb
     @Override
     @EverythingIsNonNull
     public void onFailure(Call call, IOException e) {
-        log.error("Request to dcs proxy has failed. request: {}, cause: {}", call.request(), e);
+        log.error("Request to dcs proxy has failed. request: {}", call.request());
+        log.error("The stack traces listed below", e);
         super.completeExceptionally(e);
     }
 

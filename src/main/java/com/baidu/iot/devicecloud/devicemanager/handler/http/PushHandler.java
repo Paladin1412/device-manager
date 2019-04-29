@@ -96,7 +96,7 @@ public class PushHandler {
                                             .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(message.getLogId(), "Waiting ack timeout")))
                                             .onErrorResume(
                                                     e -> {
-                                                        log.error("Something wrong when checking the acknowledges, caused by: {}", e);
+                                                        log.error("Checking the acknowledges failed", e);
                                                         return Mono.just(failedResponses.apply(message.getLogId(), e.getMessage()));
                                                     }
                                             );
@@ -111,7 +111,7 @@ public class PushHandler {
                 })
                 .onErrorResume(
                         e -> {
-                            log.error("Something wrong when pushing message to dh2, caused by: {}", e);
+                            log.error("Pushing message to dh2 failed", e);
                             return ServerResponse.ok().body(
                                     BodyInserters.fromObject(failedResponses.apply(message.getLogId(), e.getMessage())));
                         }

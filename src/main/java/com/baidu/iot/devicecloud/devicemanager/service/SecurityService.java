@@ -43,8 +43,9 @@ public class SecurityService {
         try {
             return encryptor.encrypt(key);
         } catch (Exception e) {
-            log.error("Encryptor has accounted something wrong, regard the secret key as {}. cuid:{}, caused by: {}",
-                    ERROR, cuid, e);
+            log.error("Encryptor has accounted something wrong, regard the secret key as {}. cuid:{}",
+                    ERROR, cuid);
+            log.error("The stack traces listed below", e);
             return ERROR;
         }
     }
@@ -55,7 +56,8 @@ public class SecurityService {
         try {
             return StringUtils.tokenizeToStringArray(encryptor.decrypt(secretKey), SPLITTER);
         } catch (Exception e) {
-            log.error("Something goes wrong when decrypting the secret key: {}, caused by: {}", secretKey, e);
+            log.error("Something goes wrong when decrypting the secret key: {}", secretKey);
+            log.error("The stack traces listed below", e);
         }
         return items;
     }

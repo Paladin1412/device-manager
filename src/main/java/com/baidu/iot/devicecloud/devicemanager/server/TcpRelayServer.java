@@ -128,11 +128,11 @@ public class TcpRelayServer {
                     log.info("The relay server has bounded to {}", inetSocketAddress.getPort());
                 } else {
                     log.error("The relay server has failed to bind {}.", inetSocketAddress.getPort());
-                    future.cause().printStackTrace();
+                    log.error("The stack traces listed below", future.cause());
                 }
             });
         } catch (InterruptedException e) {
-            log.error("The relay server has been interrupted: {}", e);
+            log.error("The relay server has been interrupted", e);
         }
     }
 
@@ -141,7 +141,7 @@ public class TcpRelayServer {
             try {
                 channelFuture.channel().closeFuture().sync();
             } catch (InterruptedException e) {
-                log.error("Stopping the relay server failed, caused by: {}", e);
+                log.error("Stopping the relay server failed", e);
             }
         }
 

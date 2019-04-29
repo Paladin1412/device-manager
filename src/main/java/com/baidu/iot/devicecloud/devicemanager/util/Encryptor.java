@@ -29,7 +29,7 @@ public class Encryptor {
             random = new SecureRandom();
             cipher = Cipher.getInstance("des");
         } catch (Exception e) {
-            log.error("DesEncrypt init error:{}", e);
+            log.error("DesEncrypt init error", e);
         }
     }
 

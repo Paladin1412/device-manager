@@ -198,7 +198,8 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         Channel channel = ctx.channel();
-        log.error("Caught an exception on the asr-link channel({}), caused by: {}", channel, cause);
+        log.error("Caught an exception on the asr-link channel({})", channel, cause);
+        log.error("The stack traces listed below", cause);
         workQueue.clear();
         closeOnFlush(channel);
     }
@@ -279,7 +280,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                     // recalculate length
                     tlv.setLength(valueBinUpdated.binaryValue().length);
                 } catch (Exception e) {
-                    log.error("Decorating the access token for the up-stream init package failed, caused by: {}", e);
+                    log.error("Decorating the access token for the up-stream init package failed", e);
                 }
             }
         }

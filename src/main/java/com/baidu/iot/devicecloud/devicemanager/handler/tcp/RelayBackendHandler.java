@@ -135,7 +135,8 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         Channel channel = ctx.channel();
-        log.error("Caught an exception on the asr-link dcs channel({}), caused by: {}", channel, cause);
+        log.error("Caught an exception on the asr-link dcs channel({})", channel);
+        log.error("The stack traces listed below", cause);
         workQueue.clear();
         closeOnFlush(channel);
     }

@@ -61,7 +61,7 @@ public class TlvUtil {
 
                 return status == TlvConstant.CONNECTION_OK;
             } catch (Exception e) {
-                log.error("Checking if the connection could be confirmed failed, caused by: {}", e);
+                log.error("Checking if the connection could be confirmed failed", e);
             }
         }
         return false;
@@ -87,7 +87,7 @@ public class TlvUtil {
         try {
             return msg.getType() == type;
         } catch (Exception e) {
-            log.error("Checking the tlv message's type failed, caused by: {}", e);
+            log.error("Checking the tlv message's type failed", e);
             return false;
         }
     }

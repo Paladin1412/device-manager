@@ -38,7 +38,7 @@ public class NettyUtil {
                     .writeAndFlush(msg)
                     .addListeners((ChannelFutureListener) future -> {
                         if (!future.isSuccess()) {
-                            log.error("Writing and flushing message {} to channel {} has failed: {}",
+                            log.error("Writing and flushing message {} to channel {} has failed",
                                     String.valueOf(msg),
                                     String.valueOf(channel),
                                     future.cause());

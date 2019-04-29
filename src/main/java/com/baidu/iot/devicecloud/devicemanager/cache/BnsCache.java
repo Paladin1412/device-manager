@@ -114,7 +114,7 @@ public class BnsCache {
                 return new InetSocketAddress(InetAddress.getByName(items[0]), Integer.valueOf(items[1]));
             }
         } catch (Exception e) {
-            log.error("Getting hashed address failed, caused by: {}", e);
+            log.error("Getting hashed address failed", e);
         }
         return null;
     }
@@ -142,7 +142,7 @@ public class BnsCache {
                 return new InetSocketAddress(InetAddress.getByName(items[0]), Integer.valueOf(items[1]));
             }
         } catch (Exception e) {
-            log.error("Getting random address failed, caused by: {}", e);
+            log.error("Getting random address failed", e);
         }
         return null;
     }
@@ -237,7 +237,7 @@ public class BnsCache {
                 }
                 return temp;
             } catch (IOException e) {
-                log.error("Reading command line failed, caused by: {}", e);
+                log.error("Reading command line failed", e);
             }
 
             return temp;

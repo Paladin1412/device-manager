@@ -53,7 +53,8 @@ public class JsonUtil {
         try {
             return objectMapper.writeValueAsString(object);
         } catch (Exception e) {
-            log.error("Failed to serialize json. object={}", object, e);
+            log.error("Failed to serialize json. object={}", object);
+            log.error("The stack traces listed below", e);
         }
         return null;
     }
@@ -63,7 +64,8 @@ public class JsonUtil {
         try {
             return objectMapper.readValue(json, type);
         } catch (Exception e) {
-            log.error("Failed to deserialize json. json={}, type={}", json, type, e);
+            log.error("Failed to deserialize json. json={}, type={}", json, type);
+            log.error("The stack traces listed below", e);
         }
         return null;
     }
@@ -88,7 +90,7 @@ public class JsonUtil {
         try {
             return objectMapper.readTree(in);
         } catch (IOException e) {
-            log.error("Reading input stream as tree failed, caused by: {}", e);
+            log.error("Reading input stream as tree failed", e);
         }
         return NullNode.getInstance();
     }

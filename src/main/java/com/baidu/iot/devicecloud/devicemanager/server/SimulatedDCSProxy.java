@@ -58,7 +58,7 @@ public class SimulatedDCSProxy {
                                         ChannelFuture channelFuture = ctx.channel().write(fixTlv(msg));
                                         ctx.flush();
                                         if (!channelFuture.isSuccess()) {
-                                            log.error("The dcs proxy responding message has failed: {}", channelFuture.cause());
+                                            log.error("The dcs proxy responding message has failed", channelFuture.cause());
                                             channelFuture.cause().printStackTrace();
                                         }
                                     }

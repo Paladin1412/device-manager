@@ -36,8 +36,7 @@ public class TlvOverTcpHandler extends SimpleChannelInboundHandler<TlvMessage> {
 
             channelFuture.addListeners((ChannelFutureListener) future -> {
                 if (!future.isSuccess()) {
-                    log.error("Sending message has failed: {}", channelFuture.cause());
-
+                    log.error("Sending message has failed", channelFuture.cause());
                 }
             });
         } else {
