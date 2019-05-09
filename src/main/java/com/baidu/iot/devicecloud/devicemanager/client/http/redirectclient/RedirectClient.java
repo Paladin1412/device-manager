@@ -21,6 +21,7 @@ import java.net.SocketTimeoutException;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CLT_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CUID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_LOG_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_SN;
@@ -64,6 +65,10 @@ public class RedirectClient extends AbstractHttpClient {
 
         Optional.ofNullable(message.getDeviceId()).ifPresent(
                 cuid -> builder.header(HEADER_CUID, cuid)
+        );
+
+        Optional.ofNullable(message.getCltId()).ifPresent(
+                cltid -> builder.header(HEADER_CLT_ID, cltid)
         );
 
         Optional.ofNullable(message.getSn()).ifPresent(
