@@ -24,7 +24,7 @@ tts.proxy.domain=http://res.iot.baidu.com
 tts.proxy.path=qa/cached/tts/v1/
 
 dh.bns=unknown_bns_dh
-dh.api=10.115.54.25:8207
+dh.api=10.211.245.46 8205
 
 local.server.port=
 local.server.bns=
