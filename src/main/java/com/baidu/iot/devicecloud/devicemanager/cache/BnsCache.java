@@ -67,7 +67,6 @@ public class BnsCache {
                 DH_BNS,
                 DI_BNS
         );
-        log.info(DCS_PROXY_BNS);
 
         Executors
                 .newSingleThreadScheduledExecutor()
@@ -123,6 +122,10 @@ public class BnsCache {
         return getRandomInetAddress(TTS_PROXY_BNS);
     }
 
+    public static InetSocketAddress getHashedTtsProxyAddress(String cuid, String sn) {
+        return getHashedAddress(TTS_PROXY_BNS, String.format("%s_%s", cuid, sn));
+    }
+
     public static InetSocketAddress getRandomDProxyAddress() {
         return getRandomInetAddress(DPROXY_BNS);
     }
@@ -155,7 +158,7 @@ public class BnsCache {
         try {
             ipPorts = bnsIpPortCache.get(bns);
         } catch (ExecutionException e) {
-            ipPorts = new ArrayList<>();
+            ipPorts = emptySupplier.get();
         }
 
         if (ipPorts.size() < 1) {
@@ -188,11 +191,14 @@ public class BnsCache {
 
         @Override
         @ParametersAreNonnullByDefault
-        public List<String> load(@NotNull String s) throws Exception {
+        public List<String> load(@NotNull String s) {
             return runInstance(s);
         }
 
         private List<String> runInstance(String bns) {
+            if (StringUtils.startsWithIgnoreCase(bns, "unknown")) {
+                return emptySupplier.get();
+            }
             Runtime run = Runtime.getRuntime();
             Process process = null;
             if (StringUtils.isEmpty(bns)) {
