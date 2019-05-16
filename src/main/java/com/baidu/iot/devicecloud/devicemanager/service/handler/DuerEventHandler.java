@@ -17,7 +17,6 @@ import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
 import com.baidu.iot.devicecloud.devicemanager.service.AccessTokenService;
 import com.baidu.iot.devicecloud.devicemanager.service.PushService;
-import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.BinaryNode;
@@ -56,6 +55,7 @@ import org.springframework.util.StringUtils;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
 
@@ -64,7 +64,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.time.Duration;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -74,9 +73,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_UNSUPPORTED_CONTENT_FORMAT;
@@ -95,7 +92,6 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_P
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_STANDBY_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_USER_AGENT;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlush;
 
 /**
@@ -151,17 +147,17 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                                 .remoteAddress(key),
                         new ChannelPoolHandler() {
                             @Override
-                            public void channelReleased(Channel ch) throws Exception {
+                            public void channelReleased(Channel ch) {
                                 log.debug("{} has been released", ch.toString());
                             }
 
                             @Override
-                            public void channelAcquired(Channel ch) throws Exception {
+                            public void channelAcquired(Channel ch) {
                                 log.debug("{} has been acquired", ch.toString());
                             }
 
                             @Override
-                            public void channelCreated(Channel ch) throws Exception {
+                            public void channelCreated(Channel ch) {
                                 log.debug("{} has been created", ch.toString());
                                 ChannelPipeline pipeline = ch.pipeline();
                                 pipeline
@@ -211,23 +207,24 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             return Mono.just(unauthorizedResponses.apply(message));
         }
 
-        CompletableFuture<Mono<BaseResponse>> future =
+        CompletableFuture<Flux<BaseResponse>> future =
                 CompletableFuture.supplyAsync(() -> doWork(message, optAccessToken.get()), commonSideExecutor);
         future.handleAsync(
                 (r, t) -> r
-                        .timeout(
+                        /*.timeout(
                                 Duration.ofSeconds(5),
                                 Mono.just(failedResponses.apply(message.getLogId(), "Processing timeout"))
-                        )
+                        )*/
                         .subscribe(baseResponse -> {
                             log.debug("{} executing result:{} messageId:{}",
                                     DATA_POINT_DUER_EVENT, baseResponse, message.getId());
-                        })
+                        },
+                                throwable -> log.error("Dealing with the duer event failed", throwable))
         );
-        return Mono.just(successDataPointResponses.get());
+        return Mono.just(successDataPointResponses.apply(message.getId()));
     }
 
-    private Mono<BaseResponse> doWork(DataPointMessage message, String accessToken) {
+    private Flux<BaseResponse> doWork(DataPointMessage message, String accessToken) {
         // Initializing a new connection to DCS proxy for each client connected to the relay server til the client has report the first initial package
         log.debug("The relay server is connecting to dcs.");
         InetSocketAddress assigned;
@@ -242,7 +239,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             assigned = BnsCache.getHashedDcsTcpAddress(message, false);
         }
         if (assigned == null) {
-            return Mono.error(new IllegalStateException("Couldn't find any dcs address"));
+            return Flux.error(new IllegalStateException("Couldn't find any dcs address"));
         }
         // all tlv messages those should be sent to dcs
         final UnicastProcessor<TlvMessage> requestQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
@@ -271,26 +268,19 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             }
         });
 
-        return Flux.push(fluxSink -> responseQueue.subscribe(
-                    new BaseSubscriber<TlvMessage>() {
-                        @Override
-                        protected void hookOnNext(TlvMessage value) {
-                            fluxSink.next(value);
-                        }
-
-                        @Override
-                        protected void hookOnComplete() {
-                            fluxSink.complete();
-                        }
+        return deal(Flux.push(fluxSink -> responseQueue.subscribe(
+                new BaseSubscriber<TlvMessage>() {
+                    @Override
+                    protected void hookOnNext(TlvMessage value) {
+                        fluxSink.next(value);
                     }
-                ))
-                .collectList()
-                .flatMap(list -> pushService.push(deal(list, message)))
-                .doFinally(signalType -> {
-                    log.debug("Finally, refreshing the access token, signalType={}", signalType);
-                    accessTokenService.refreshAccessToken(message);
-                })
-                .switchIfEmpty(Mono.defer(() ->Mono.just(failedResponses.apply(message.getLogId(), "Nothing to respond"))));
+
+                    @Override
+                    protected void hookOnComplete() {
+                        fluxSink.complete();
+                    }
+                }
+        )), message);
     }
 
     private final BiFunction<DataPointMessage, String, TlvMessage> initPackage =
@@ -382,11 +372,11 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         }
     }
 
-    private final Supplier<DataPointMessage> successDataPointResponses = () -> {
+    private final Function<Integer, DataPointMessage> successDataPointResponses = id -> {
         DataPointMessage response = new DataPointMessage();
         response.setVersion(DEFAULT_VERSION);
         response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID);
-        response.setId(IdGenerator.nextId());
+        response.setId(id);
         return response;
     };
 
@@ -410,7 +400,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         return response;
     };
 
-    private Optional<String> loadAccessToken(BaseMessage message) throws Exception {
+    private Optional<String> loadAccessToken(BaseMessage message) {
         AccessTokenResponse response = accessTokenService.try2ObtainAccessToken(message);
         if (response != null && StringUtils.hasText(response.getAccessToken())) {
             return Optional.of(response.getAccessToken());
@@ -419,20 +409,18 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         return Optional.empty();
     }
 
-    private List<DataPointMessage> deal(List<Object> list, DataPointMessage origin) {
-        List<TlvMessage> tlvs = list
-                .stream()
-                .filter(o -> o instanceof TlvMessage)
-                .map(TlvMessage.class::cast)
-                .collect(Collectors.toList());
-
-        return Adapter.directive2DataPoint(
-                directiveProcessor.process(
-                        origin.getDeviceId(),
-                        origin.getSn(),
-                        tlvs
-                ),
-                origin
-        );
+    private Flux<BaseResponse> deal(Flux<TlvMessage> messageFlux, DataPointMessage origin) {
+        String cuid = origin.getDeviceId();
+        String sn = origin.getSn();
+        return messageFlux
+                .flatMapSequential(tlv -> directiveProcessor.process(cuid, sn, tlv))
+                .flatMapSequential(directive -> Flux.just(Adapter.directive2DataPoint(directive, origin)))
+                .flatMapSequential(pushService::push)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.debug("Finally, refreshing the access token");
+                        accessTokenService.refreshAccessToken(origin);
+                    }
+                });
     }
 }

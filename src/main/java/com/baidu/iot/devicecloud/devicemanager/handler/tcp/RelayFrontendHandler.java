@@ -108,8 +108,8 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) throws Exception {
-        log.debug("The asr-link relay server has read a message: {}", String.valueOf(msg));
+    protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) {
+        log.debug("The asr-link relay server has read a message: {}", msg);
 
         // server is expecting the first initial package: 0x0001
         // everything arrived before the first initial package will be ignored
@@ -126,7 +126,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                     .channel(ctx.channel().getClass())
                     .handler(new ChannelInitializer<SocketChannel>() {
                         @Override
-                        protected void initChannel(SocketChannel ch) throws Exception {
+                        protected void initChannel(SocketChannel ch) {
                             ch.pipeline()
                                     // Inbounds start from below
                                     .addLast("tlvDecoder", new TlvDecoder())

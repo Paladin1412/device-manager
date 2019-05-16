@@ -1,6 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.client.http.ttsproxyclient.bean;
 
-import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
+import com.fasterxml.jackson.databind.node.BinaryNode;
 import lombok.Data;
 
 /**
@@ -12,5 +12,7 @@ import lombok.Data;
 public class TtsRequest {
     private String cuid;
     private String sn;
-    private TlvMessage message;
+    private String contentId;
+    private String key;
+    private BinaryNode data;
 }

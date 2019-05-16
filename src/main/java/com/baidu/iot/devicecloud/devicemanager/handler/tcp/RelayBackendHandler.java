@@ -6,17 +6,21 @@ import com.baidu.iot.devicecloud.devicemanager.constant.ConfirmationStates;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
 import com.baidu.iot.devicecloud.devicemanager.util.NettyUtil;
+import com.fasterxml.jackson.databind.node.BinaryNode;
+import com.google.common.primitives.Bytes;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import lombok.extern.slf4j.Slf4j;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
 
-import java.util.stream.Stream;
+import java.util.List;
+import java.util.Optional;
 
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CUID;
@@ -63,30 +67,41 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) throws Exception {
+    protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) {
         Channel upstreamChannel = ctx.channel();
         log.debug("The asr-link relay server inner channel {} has read a message:\n{}",
-                upstreamChannel.toString(), String.valueOf(msg));
+                upstreamChannel.toString(), msg);
         if (isDownstreamInitPackage(msg)) {
             initialPackageHasArrived = true;
             if (confirmedConnection(msg)) {
                 upstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMED);
                 log.debug("{} has been confirmed by dcs. Subscribing to dcs", upstreamChannel.toString());
-                downstreamWorkQueue.subscribe(NettyUtil.good2Go(upstreamChannel).<TlvMessage>get());
+                downstreamWorkQueue.subscribe(NettyUtil.good2Go(upstreamChannel).get());
 
                 downstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMED);
                 log.debug("{} has been confirmed by dm. Subscribing to asr", upstreamChannel.toString());
-                workQueue.collectList()
-                        .flatMapMany(list -> Flux.fromStream(
-                                Stream.concat(
-                                        Adapter.directive2DataPointTLV(
-                                                directiveProcessor.process(this.cuid, this.sn, list),
-                                                TlvConstant.TYPE_DOWNSTREAM_DUMI
-                                        ).stream(),
-                                        list.stream().filter(isDownStreamFinishTlv)
-                                )
-                        ))
-                        .subscribe(NettyUtil.good2Go(downstreamChannel).<TlvMessage>get());
+                workQueue
+                        .groupBy(TlvMessage::getType)
+                        .flatMap(Flux::collectList)
+                        .flatMap(list -> {
+                            Optional<TlvMessage> merged = merge(list);
+                            return merged.<Publisher<? extends TlvMessage>>map(Flux::just).orElseGet(Flux::empty);
+                        })
+                        .flatMap(message -> {
+                            if (isDownStreamFinishTlv.test(message)) {
+                                return Flux.just(message);
+                            }
+                            return directiveProcessor.process(this.cuid, this.sn, message)
+                                    .flatMapSequential(directive -> {
+                                        TlvMessage tlv = Adapter.directive2DataPointTLV(directive, message.getType());
+                                        if (tlv == null) {
+                                            return Flux.empty();
+                                        }
+                                        return Flux.just(tlv);
+                                    })
+                                    .onErrorResume(t -> Flux.empty());
+                        })
+                        .subscribe(NettyUtil.good2Go(downstreamChannel).get());
 
                 this.cuid = upstreamChannel.attr(CUID).get();
                 this.sn = upstreamChannel.attr(SN).get();
@@ -151,5 +166,21 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
             }
         }
         super.userEventTriggered(ctx, evt);
+    }
+
+    private Optional<TlvMessage> merge(List<TlvMessage> messages) {
+        return messages.stream()
+                .reduce(
+                        (t1, t2) -> {
+                            t1.setLength(t1.getLength() + t2.getLength());
+                            BinaryNode v1 = t1.getValue();
+                            BinaryNode v2 = t2.getValue();
+                            byte[] b1 = v1.binaryValue();
+                            byte[] b2 = v2.binaryValue();
+                            byte[] b0 = Bytes.concat(b1, b2);
+                            t1.setValue(new BinaryNode(b0));
+                            return t1;
+                        }
+                );
     }
 }

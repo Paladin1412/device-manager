@@ -40,7 +40,7 @@ public class MultipartFormDataProcessor {
         AppendableCharSequence seq = new AppendableCharSequence(128);
         lineParser = new MultipartFormDataProcessor.LineParser(seq, 4096);
         headerParser = new MultipartFormDataProcessor.HeaderParser(seq, 8192);
-        defaultResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+        defaultResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND);
 
         init();
     }
@@ -49,8 +49,9 @@ public class MultipartFormDataProcessor {
         String[] initLine = readInit();
         if (initLine == null) {
             message = defaultResponse;
+        } else {
+            message = createResponse(initLine);
         }
-        message = createResponse(initLine);
         readHeaders();
     }
 

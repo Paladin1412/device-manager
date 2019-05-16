@@ -39,10 +39,9 @@ public class NettyUtil {
                     .addListeners((ChannelFutureListener) future -> {
                         if (!future.isSuccess()) {
                             log.error("Writing and flushing message {} to channel {} has failed",
-                                    String.valueOf(msg),
-                                    String.valueOf(channel),
+                                    msg,
+                                    channel,
                                     future.cause());
-                            future.cause().printStackTrace();
                         }
 
                         String msgLog;
@@ -51,7 +50,7 @@ public class NettyUtil {
                         } else {
                             msgLog = String.valueOf(msg);
                         }
-                        log.debug("Writing and flushing message \n{}\nto {} successfully.", msgLog, String.valueOf(channel));
+                        log.debug("Writing and flushing message \n{}\nto {} successfully.", msgLog, channel);
                     }, ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
         } else {
             log.warn("Connection {} has been reset by peer", channel);
@@ -74,7 +73,7 @@ public class NettyUtil {
                     && ConfirmationStates.CONFIRMED == channel.attr(CONFIRMATION_STATE).get()) {
                 writeAndFlush(channel, t);
             } else {
-                log.debug("{} has not been confirmed, the message {} being discarded.", channel.toString(), String.valueOf(t));
+                log.debug("{} has not been confirmed, the message {} being discarded.", channel.toString(), t);
             }
         };
     }

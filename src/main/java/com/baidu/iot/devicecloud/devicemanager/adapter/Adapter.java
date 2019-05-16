@@ -71,6 +71,20 @@ public class Adapter {
                 .collect(Collectors.toList());
     }
 
+    public static TlvMessage directive2DataPointTLV(JsonNode directive, int type) {
+        try {
+            DataPointMessage assembled = directive2DataPoint(directive, null);
+            byte[] bytes = JsonUtil.writeAsBytes(assembled);
+            long vlen = bytes.length;
+            log.debug("Adapted ASR directive:\n{}", assembled);
+            return new TlvMessage(type, vlen, bytes);
+        } catch (Exception e) {
+            log.error("Adapting directives from json node to tlv failed", e);
+        }
+        return null;
+
+    }
+
     public static List<TlvMessage> directive2DataPointTLV(List<JsonNode> directives, int type) {
         if (directives == null || directives.size() < 1 || !isLegalType(type)) {
             return Collections.emptyList();
@@ -82,18 +96,7 @@ public class Adapter {
         return directives
                 .stream()
                 .map(
-                        node -> {
-                            try {
-                                DataPointMessage assembled = directive2DataPoint0(node, null);
-                                byte[] bytes = JsonUtil.writeAsBytes(assembled);
-                                long vlen = bytes.length;
-                                log.debug("Adapted ASR directive:\n{}", assembled);
-                                return new TlvMessage(type, vlen, bytes);
-                            } catch (Exception e) {
-                                log.error("Adapting directives from json node to tlv failed", e);
-                            }
-                            return null;
-                        }
+                        node -> directive2DataPointTLV(node, type)
                 )
                 .collect(Collectors.toList());
     }
@@ -107,11 +110,11 @@ public class Adapter {
 
         return directives
                 .stream()
-                .map(node -> directive2DataPoint0(node, origin))
+                .map(node -> directive2DataPoint(node, origin))
                 .collect(Collectors.toList());
     }
 
-    private static DataPointMessage directive2DataPoint0(JsonNode directive, DataPointMessage origin) {
+    public static DataPointMessage directive2DataPoint(JsonNode directive, DataPointMessage origin) {
         DataPointMessage assembled = new DataPointMessage();
         Optional.ofNullable(origin).ifPresent(
                 dp -> BeanUtils.copyProperties(origin, assembled)

@@ -65,6 +65,9 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
     @Value("${di.scheme:http://}")
     private String diScheme;
 
+    @Value("${di.url:}")
+    private String diUrl;
+
     @Nullable
     public DeviceResource auth(AuthorizationMessage authRequest) {
         Response response = null;
@@ -225,6 +228,8 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
         InetSocketAddress hashedAddress = BnsCache.getRandomDiAddress();
         if (hashedAddress != null) {
             domainAddress = PathUtil.dropOffPrefix(hashedAddress.toString(), SPLITTER_URL);
+        } else if (StringUtils.hasText(diUrl)) {
+            domainAddress = diUrl;
         }
         Preconditions.checkArgument(StringUtils.hasText(domainAddress), "Couldn't find any di address");
         return domainAddress;
@@ -238,7 +243,7 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
     }
 
     @Override
-    public void afterPropertiesSet() throws Exception {
+    public void afterPropertiesSet() {
         commonSideExecutor = new ThreadPoolExecutor(0, 20,
                 60L, TimeUnit.SECONDS,
                 new SynchronousQueue<>());

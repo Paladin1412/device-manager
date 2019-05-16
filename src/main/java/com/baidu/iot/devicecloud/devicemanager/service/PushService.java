@@ -33,6 +33,7 @@ import org.springframework.util.StringUtils;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
 
@@ -106,7 +107,7 @@ public class PushService implements InitializingBean {
     }
 
     @Override
-    public void afterPropertiesSet() throws Exception {
+    public void afterPropertiesSet() {
         pooledMonoSignals = new ConcurrentHashMap<>();
         dataBufferFactory = new DefaultDataBufferFactory();
     }
@@ -115,19 +116,14 @@ public class PushService implements InitializingBean {
         if (message.isNeedAck()) {
             String key = securityService.nextSecretKey(message.getDeviceId());
             UnicastProcessor<DataPointMessage> signal = UnicastProcessor.create(Queues.<DataPointMessage>xs().get());
-            pool(key, signal);
+            pooledMonoSignals.put(key, signal);
             return key;
         }
         return null;
     }
 
-    private void pool(String key, UnicastProcessor<DataPointMessage> signal) {
-        if (StringUtils.hasText(key) && signal != null) {
-            signal
-                    .timeout(Duration.ofSeconds(5))
-                    .doFinally(signalType -> pooledMonoSignals.remove(key));
-            pooledMonoSignals.put(key, signal);
-        }
+    public void unPool(String key) {
+        pooledMonoSignals.remove(key);
     }
 
     public void advice(String key, DataPointMessage message) {
@@ -135,12 +131,12 @@ public class PushService implements InitializingBean {
             return;
         }
         String[] items = securityService.decryptSecretKey(key);
-        if (items != null && items.length >= 4) {
-            String ip = items[1];
-            String port = items[2];
+        if (items != null && items.length >= 5) {
+            String ip = items[2];
+            String port = items[3];
             if (localServerInfo.getLocalServerIp().equalsIgnoreCase(ip)) {
                 UnicastProcessor<DataPointMessage> signal = pooledMonoSignals.get(key);
-                if (signal != null && !signal.isTerminated()) {
+                if (signal != null && !signal.isDisposed()) {
                     signal.onNext(message);
                 }
             } else {
@@ -156,7 +152,7 @@ public class PushService implements InitializingBean {
         }
     }
 
-    private Mono<BaseResponse> push(DataPointMessage message) {
+    public Mono<BaseResponse> push(DataPointMessage message) {
         return Mono.from(Mono.justOrEmpty(
                 this.client.pushMessage(message))
                 .flatMap(response -> {
@@ -164,8 +160,7 @@ public class PushService implements InitializingBean {
                         ResponseBody body = response.body();
                         if (body != null) {
                             try {
-                                byte[] bytes = body.bytes();
-                                log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(bytes)));
+                                log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(body.bytes())));
                             } catch (IOException ignore) { }
                         }
                         return Mono.just(successResponsesWithMessage.apply(message));
@@ -223,7 +218,8 @@ public class PushService implements InitializingBean {
             return Mono.just(failedResponses.apply(message.getLogId(), "No signal"));
         }
 
-        return Mono.create(sink -> signal.subscribe(new BaseSubscriber<DataPointMessage>(){
+        return Mono.create(sink -> signal
+                .subscribe(new BaseSubscriber<DataPointMessage>(){
             @Override
             protected void hookOnNext(DataPointMessage ack) {
                 if (ack != null) {
@@ -233,8 +229,7 @@ public class PushService implements InitializingBean {
                     }
                     if (stub.isEmpty()) {
                         sink.success(successResponsesWithMessage.apply(message));
-                        signal.onComplete();
-                        pooledMonoSignals.remove(key);
+                        signal.cancel();
                     }
                 }
             }
@@ -247,6 +242,11 @@ public class PushService implements InitializingBean {
             @Override
             protected void hookOnError(Throwable throwable) {
                 sink.error(throwable);
+            }
+
+            @Override
+            protected void hookFinally(SignalType type) {
+                pooledMonoSignals.remove(key);
             }
         }));
     }
@@ -285,7 +285,7 @@ public class PushService implements InitializingBean {
                             desired.content()
                                     .reduce(new InputStream() {
                                         @Override
-                                        public int read() throws IOException {
+                                        public int read() {
                                             return -1;
                                         }
                                     }, (InputStream t, DataBuffer d) -> new SequenceInputStream(t, d.asInputStream()))
@@ -312,7 +312,7 @@ public class PushService implements InitializingBean {
                 part.content()
                         .reduce(new InputStream() {
                             @Override
-                            public int read() throws IOException {
+                            public int read() {
                                 return -1;
                             }
                         }, (InputStream t, DataBuffer d) -> new SequenceInputStream(t, d.asInputStream()))
