@@ -1,9 +1,9 @@
 package com.baidu.iot.devicecloud.devicemanager.cache;
 
+import com.baidu.iot.devicecloud.devicemanager.util.LogUtils;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import com.google.common.cache.RemovalListener;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -43,14 +43,14 @@ public class AddressCache {
                 .expireAfterWrite(Duration.ofMinutes(EXPIRATION_MINUTES))
                 .refreshAfterWrite(Duration.ofMinutes(EXPIRATION_MINUTES))
                 .recordStats()
-                .removalListener((RemovalListener<String, InetSocketAddress>) n -> log.debug("Removed: ({}, {}), caused by: {}", n.getKey(), n.getValue(), n.getCause().toString()))
+                .removalListener(LogUtils.REMOVAL_LOGGER.apply(log))
                 .build(CacheLoader.asyncReloading(new AddressCache.AddressCacheLoader(), Executors.newSingleThreadExecutor()));
     }
 
     private static class AddressCacheLoader extends CacheLoader<String, InetSocketAddress> {
         @Override
         @ParametersAreNonnullByDefault
-        public InetSocketAddress load(String s) throws Exception {
+        public InetSocketAddress load(String s) {
             if (StringUtils.endsWithIgnoreCase(s, DCS_SUFFIX)) {
                 return BnsCache.getRandomInetAddress(DCS_PROXY_BNS);
             }

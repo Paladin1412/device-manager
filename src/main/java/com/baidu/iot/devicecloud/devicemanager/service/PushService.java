@@ -40,7 +40,6 @@ import reactor.util.concurrent.Queues;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -157,11 +156,14 @@ public class PushService implements InitializingBean {
                 this.client.pushMessage(message))
                 .flatMap(response -> {
                     if (response != null && response.isSuccessful()) {
-                        ResponseBody body = response.body();
-                        if (body != null) {
-                            try {
-                                log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(body.bytes())));
-                            } catch (IOException ignore) { }
+                        if (log.isDebugEnabled()) {
+                            ResponseBody body = response.body();
+                            if (body != null) {
+                                try {
+                                    //noinspection BlockingMethodInNonBlockingContext
+                                    log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(body.bytes())));
+                                } catch (IOException ignore) { }
+                            }
                         }
                         return Mono.just(successResponsesWithMessage.apply(message));
                     }

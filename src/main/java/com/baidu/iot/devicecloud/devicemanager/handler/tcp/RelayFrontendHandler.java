@@ -108,7 +108,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) {
-        log.debug("The asr-link relay server has read a message: {}", msg);
+//        log.debug("The asr-link relay server has read a message: {}", msg);
 
         // server is expecting the first initial package: 0x0001
         // everything arrived before the first initial package will be ignored
@@ -245,7 +245,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                 paramNode = (ObjectNode) param;
             } else if (param.isTextual()) {
                 String paramText = param.asText();
-                log.debug("paramText: {}", paramText);
+//                log.debug("paramText: {}", paramText);
                 paramNode = (ObjectNode) JsonUtil.readTree(paramText);
             }
             if (paramNode == null) {

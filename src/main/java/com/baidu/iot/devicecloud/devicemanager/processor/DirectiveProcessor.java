@@ -8,6 +8,7 @@ import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
+import com.baidu.iot.devicecloud.devicemanager.util.LogUtils;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -100,7 +101,7 @@ public class DirectiveProcessor {
                 .expireAfterAccess(Duration.ofSeconds(ONE_MINUTE_SECONDS / 2))
                 .initialCapacity(1_000)
                 .maximumSize(1_000_000)
-                .removalListener(n -> log.debug("Removed ({}, {}), caused by: {}", n.getKey(), n.getValue(), n.getCause().toString()))
+                .removalListener(LogUtils.REMOVAL_LOGGER.apply(log))
                 .build();
     }
 
@@ -158,7 +159,10 @@ public class DirectiveProcessor {
                                 case TlvConstant.TYPE_DOWNSTREAM_DUMI: {
                                     MultipartStreamDecoder decoderDumi = decoderSupplier.get();
                                     return processMultiparts(cuid, sn, parseParts(decoderDumi, group), MessageType.BASE)
-                                            .flatMap(directive -> Mono.justOrEmpty(Adapter.directive2DataPointTLV(directive, groupKey)));
+                                            .flatMap(directive -> {
+                                                log.debug("Publishing asr directive:\n{}", directive);
+                                                return Mono.justOrEmpty(Adapter.directive2DataPointTLV(directive, groupKey));
+                                            });
                                 }
                             }
                         }
@@ -209,7 +213,10 @@ public class DirectiveProcessor {
                                 case TlvConstant.TYPE_DOWNSTREAM_DUMI: {
                                     MultipartStreamDecoder decoderDumi = decoderSupplier.get();
                                     return processMultiparts(cuid, sn, parseParts(decoderDumi, group), origin.getMessageType())
-                                            .flatMap(directive -> Mono.justOrEmpty(Adapter.directive2DataPoint(directive, origin)));
+                                            .flatMap(directive -> {
+                                                log.debug("Publishing event directive:\n{}", directive);
+                                                return Mono.justOrEmpty(Adapter.directive2DataPoint(directive, origin));
+                                            });
                                 }
                             }
                         }
@@ -227,6 +234,7 @@ public class DirectiveProcessor {
         Map<String, String> keysMap = new HashMap<>();
         String cuid = request.getCuid();
         String sn = request.getSn();
+        log.debug("Processing final TTS for cuid:{} sn:{}", cuid, sn);
         JsonNode jsonTree = JsonUtil.readTree(request.getData().binaryValue());
         JsonNode ttsJsonNode = jsonTree.path(JSON_KEY_TTS);
         if (ttsJsonNode instanceof ArrayNode) {
