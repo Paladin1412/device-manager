@@ -15,4 +15,5 @@ public class TtsRequest {
     private String contentId;
     private String key;
     private BinaryNode data;
+    private int messageType;
 }

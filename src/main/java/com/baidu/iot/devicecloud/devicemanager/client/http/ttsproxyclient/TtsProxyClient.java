@@ -5,6 +5,7 @@ import com.baidu.iot.devicecloud.devicemanager.client.http.AbstractHttpClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.callback.CallbackFuture;
 import com.baidu.iot.devicecloud.devicemanager.client.http.ttsproxyclient.bean.TtsRequest;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
+import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -75,8 +76,8 @@ public class TtsProxyClient extends AbstractHttpClient {
         return sendSync(request);
     }
 
-    public Response requestAudioUrl(String cuid, String sn, String cid) {
-        Request request = buildRequest(cuid, sn, cid);
+    public Response requestAudioUrl(String cuid, String sn, String cid, int messageType) {
+        Request request = buildRequest(cuid, sn, cid, messageType);
         Assert.notNull(request, "TTS Proxy Request is null");
         return sendSync(request);
     }
@@ -133,9 +134,17 @@ public class TtsProxyClient extends AbstractHttpClient {
 
         String[] pathItems = Stream.concat(Stream.of(TTS_PROXY_CACHE_PATH), Stream.of(contentId)).toArray(String[]::new);
         String url = getFullPath(message.getCuid(), message.getSn(), pathItems);
+        UriComponentsBuilder uriComponentsBuilder = UriComponentsBuilder.fromHttpUrl(url);
+
+        // agreements with the tts-proxy service
         if (StringUtils.hasText(key)) {
-            url = UriComponentsBuilder.fromHttpUrl(url).queryParam("key", key).build().toString();
+            uriComponentsBuilder.queryParam("key", key);
         }
+        if (MessageType.PUSH_MESSAGE == message.getMessageType()) {
+            uriComponentsBuilder.queryParam("storageStrategy", "buffer");
+        }
+
+        url = uriComponentsBuilder.build().toString();
         Request.Builder builder = new Request.Builder()
                 .url(url)
                 .header(HttpHeaders.CONTENT_TYPE, org.springframework.http.MediaType.APPLICATION_OCTET_STREAM_VALUE)
@@ -152,10 +161,17 @@ public class TtsProxyClient extends AbstractHttpClient {
         return builder.build();
     }
 
-    private Request buildRequest(String cuid, String sn, String cid) {
+    private Request buildRequest(String cuid, String sn, String cid, int messageType) {
         String[] pathItems = Stream.concat(Stream.of(TTS_PROXY_PATH), Stream.of(cid)).toArray(String[]::new);
+        UriComponentsBuilder uriComponentsBuilder = UriComponentsBuilder.fromHttpUrl(getFullPath(cuid, sn, pathItems));
+
+        // agreements with the tts-proxy service
+        if (MessageType.PUSH_MESSAGE == messageType) {
+            uriComponentsBuilder.queryParam("storageStrategy", "buffer");
+        }
+
         Request.Builder builder = new Request.Builder()
-                .url(getFullPath(cuid, sn, pathItems))
+                .url(uriComponentsBuilder.build().toString())
                 .header(CommonConstant.HEADER_MESSAGE_TIMESTAMP, Long.toString(System.currentTimeMillis()))
                 .get();
         if (StringUtils.hasText(cuid)) {

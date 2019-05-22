@@ -103,7 +103,8 @@ public class ReportHandler {
                 .filter(o -> o instanceof BaseMessage)
                 .map(BaseMessage.class::cast)
                 .flatMap(this.reportService::handle)
-                .doOnNext(o -> {
+                .flatMap(o -> {
+                    // decorate the response according to the received object
                     if (o instanceof DataPointMessage) {
                         DataPointMessage message = (DataPointMessage) o;
                         if (isCoapOk.test(message)) {
@@ -113,7 +114,7 @@ public class ReportHandler {
                         } else {
                             failed.accept(builder);
                         }
-
+                        return builder.syncBody(o);
                     } else if (o instanceof BaseResponse) {
                         BaseResponse response = (BaseResponse) o;
                         if (response.getCode() == MESSAGE_SUCCESS_CODE) {
@@ -121,9 +122,14 @@ public class ReportHandler {
                         } else {
                             failed.accept(builder);
                         }
+                        return builder.build();
                     }
+                    return Mono.empty();
                 })
-                .flatMap(builder::syncBody)
+                .switchIfEmpty(Mono.defer(() -> {
+                    failed.accept(builder);
+                    return builder.build();
+                }))
                 .onErrorResume(
                         e -> {
                             String em = e.getMessage();

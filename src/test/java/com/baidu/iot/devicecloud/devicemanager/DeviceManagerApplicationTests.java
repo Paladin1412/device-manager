@@ -55,10 +55,10 @@ public class DeviceManagerApplicationTests {
 		byte[] bytes = tts.getBytes();
 		TlvMessage message = new TlvMessage(TlvConstant.TYPE_DOWNSTREAM_TTS, bytes.length, bytes);
 		TtsRequest ttsRequest = new TtsRequest();
-		ttsRequest.setMessage(message);
+		ttsRequest.setData(message.getValue());
 		ttsRequest.setSn("9009");
 		ttsRequest.setCuid("0285000000001c");
-		System.out.println(ttsService.requestTTSSync(ttsRequest, false));
+		System.out.println(ttsService.requestTTSSync(ttsRequest, false, null));
 	}
 
 	@Test
@@ -67,10 +67,10 @@ public class DeviceManagerApplicationTests {
 		byte[] bytes = pretts.getBytes();
 		TlvMessage message = new TlvMessage(TlvConstant.TYPE_DOWNSTREAM_TTS, bytes.length, bytes);
 		TtsRequest ttsRequest = new TtsRequest();
-		ttsRequest.setMessage(message);
+		ttsRequest.setData(message.getValue());
 		ttsRequest.setSn("9009");
 		ttsRequest.setCuid("0285000000001c");
-		ttsService.requestTTSSync(ttsRequest, true);
+		ttsService.requestTTSSync(ttsRequest, true, null);
 	}
 
 	@Test
@@ -78,7 +78,7 @@ public class DeviceManagerApplicationTests {
 		String secretKey = "IP6DVK5fmLgRxN2mNGbZafEWBIpvIk9PfUnEdMxivunifDMTB272MaX7DC1T4zh50-EfU_gBeHzFMw0Db94icluNXfXsyLXk";
 		String[] items = securityService.decryptSecretKey(secretKey);
         Assert.assertNotNull(items);
-        Assert.assertTrue(items.length == 4);
+		Assert.assertEquals(5, items.length);
         System.out.println(Arrays.toString(items));
     }
 }

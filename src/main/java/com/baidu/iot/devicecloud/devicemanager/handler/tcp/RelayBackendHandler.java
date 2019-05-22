@@ -1,32 +1,26 @@
 package com.baidu.iot.devicecloud.devicemanager.handler.tcp;
 
-import com.baidu.iot.devicecloud.devicemanager.adapter.Adapter;
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.constant.ConfirmationStates;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
+import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.NettyUtil;
-import com.fasterxml.jackson.databind.node.BinaryNode;
-import com.google.common.primitives.Bytes;
+import com.baidu.iot.devicecloud.devicemanager.util.TlvUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import lombok.extern.slf4j.Slf4j;
-import org.reactivestreams.Publisher;
-import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
-
-import java.util.List;
-import java.util.Optional;
 
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CUID;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.SN;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.closeOnFlush;
-import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.isDownStreamFinishTlv;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlush;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.confirmedConnection;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isDownstreamFinishPackage;
@@ -42,7 +36,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     private final Channel downstreamChannel;
     private final UnicastProcessor<TlvMessage> downstreamWorkQueue;
     private final UnicastProcessor<TlvMessage> workQueue;
-    private final DirectiveProcessor directiveProcessor;
+    private final DirectiveProcessor processor;
 
     private String cuid = null;
     private String sn = null;
@@ -55,13 +49,13 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
 
     RelayBackendHandler(Channel downstreamChannel,
                         UnicastProcessor<TlvMessage> downstreamWorkQueue,
-                        DirectiveProcessor directiveProcessor) {
+                        TtsService ttsService) {
         // auto release the received data
         super();
 
         this.downstreamChannel = downstreamChannel;
         this.downstreamWorkQueue = downstreamWorkQueue;
-        this.directiveProcessor = directiveProcessor;
+        this.processor = new DirectiveProcessor(ttsService);
         this.workQueue =
                 UnicastProcessor.create(Queues.<TlvMessage>xs().get());
     }
@@ -69,8 +63,6 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) {
         Channel upstreamChannel = ctx.channel();
-        log.debug("The asr-link relay server inner channel {} has read a message:\n{}",
-                upstreamChannel.toString(), msg);
         if (isDownstreamInitPackage(msg)) {
             initialPackageHasArrived = true;
             if (confirmedConnection(msg)) {
@@ -80,26 +72,32 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
 
                 downstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMED);
                 log.debug("{} has been confirmed by dm. Subscribing to asr", upstreamChannel.toString());
+
                 workQueue
-                        .groupBy(TlvMessage::getType)
-                        .flatMap(Flux::collectList)
-                        .flatMap(list -> {
-                            Optional<TlvMessage> merged = merge(list);
-                            return merged.<Publisher<? extends TlvMessage>>map(Flux::just).orElseGet(Flux::empty);
-                        })
-                        .flatMap(message -> {
-                            if (isDownStreamFinishTlv.test(message)) {
-                                return Flux.just(message);
+                        .groupBy(TlvUtil::isDownstreamFinishPackage)
+                        .flatMapSequential(group -> {
+                            if (Boolean.valueOf(String.valueOf(group.key()))) {
+                                return group.flatMap(Mono::just);
+                            } else {
+                                // input 0xF002, 0xF003, 0xF004 or 0xF006
+                                // output TlvMessage
+                                return group
+                                        .groupBy(TlvUtil::isAsrPackage)
+                                        .flatMapSequential(subGroup -> {
+                                            if (Boolean.valueOf(String.valueOf(subGroup.key()))) {
+                                                return subGroup.flatMap(Mono::just);
+                                            } else {
+                                                // input 0xF003, 0xF004 or 0xF006
+                                                // output TlvMessage
+                                                return processor.processAsr(this.cuid, this.sn, subGroup);
+                                            }
+                                        });
                             }
-                            return directiveProcessor.process(this.cuid, this.sn, message)
-                                    .flatMapSequential(directive -> {
-                                        TlvMessage tlv = Adapter.directive2DataPointTLV(directive, message.getType());
-                                        if (tlv == null) {
-                                            return Flux.empty();
-                                        }
-                                        return Flux.just(tlv);
-                                    })
-                                    .onErrorResume(t -> Flux.empty());
+                        })
+                        .elapsed()
+                        .flatMap(t -> {
+                            log.debug("Elapsed time: {}ms", t.getT1());
+                            return Mono.just(t.getT2());
                         })
                         .subscribe(NettyUtil.good2Go(downstreamChannel).get());
 
@@ -143,7 +141,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         log.debug("The dcs has logged out.");
-        workQueue.clear();
+        clearWorkQueue();
         super.channelInactive(ctx);
     }
 
@@ -152,7 +150,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
         Channel channel = ctx.channel();
         log.error("Caught an exception on the asr-link dcs channel({})", channel);
         log.error("The stack traces listed below", cause);
-        workQueue.clear();
+        clearWorkQueue();
         closeOnFlush(channel);
     }
 
@@ -168,19 +166,10 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
         super.userEventTriggered(ctx, evt);
     }
 
-    private Optional<TlvMessage> merge(List<TlvMessage> messages) {
-        return messages.stream()
-                .reduce(
-                        (t1, t2) -> {
-                            t1.setLength(t1.getLength() + t2.getLength());
-                            BinaryNode v1 = t1.getValue();
-                            BinaryNode v2 = t2.getValue();
-                            byte[] b1 = v1.binaryValue();
-                            byte[] b2 = v2.binaryValue();
-                            byte[] b0 = Bytes.concat(b1, b2);
-                            t1.setValue(new BinaryNode(b0));
-                            return t1;
-                        }
-                );
+    private void clearWorkQueue() {
+        if (workQueue != null && !workQueue.isDisposed()) {
+            workQueue.onComplete();
+            workQueue.clear();
+        }
     }
 }

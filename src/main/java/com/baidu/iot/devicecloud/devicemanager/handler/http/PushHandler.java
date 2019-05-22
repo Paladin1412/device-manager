@@ -5,7 +5,10 @@ import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant;
+import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
+import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
 import com.baidu.iot.devicecloud.devicemanager.service.PushService;
+import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
@@ -53,14 +56,16 @@ import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isCoapReques
 @Component
 public class PushHandler {
     private final PushService pushService;
+    private final TtsService ttsService;
 
     @Autowired
-    public PushHandler(PushService pushService) {
+    public PushHandler(PushService pushService, TtsService ttsService) {
         this.pushService = pushService;
+        this.ttsService = ttsService;
     }
 
     @NonNull
-    public Mono<ServerResponse> deal(ServerRequest request) {
+    public Mono<ServerResponse> deal1(ServerRequest request) {
         BaseMessage message = new BaseMessage();
         assembleFromHeader.accept(request, message);
         request.queryParam("clt_id").ifPresent(clt_id -> {
@@ -77,6 +82,7 @@ public class PushHandler {
         // pushing needs ack
         message.setNeedAck(true);
         List<Integer> idList = new ArrayList<>();
+        String key = pushService.pool(message);
         return request.body(BodyExtractors.toMultipartData())
                 .flatMap(parts -> {
                     // The order of directives would be sent to device
@@ -86,7 +92,6 @@ public class PushHandler {
                     }
                     List<Part> audio = parts.getOrDefault(PARAMETER_AUDIO, new ArrayList<>());
 
-                    String key = pushService.pool(message);
                     List<DataPointMessage> messages = assemble(method, metadata, audio, idList, key, message);
                     return pushService.push(messages)
                             .flatMap(baseResponse -> {
@@ -115,6 +120,59 @@ public class PushHandler {
                             return ServerResponse.ok().body(
                                     BodyInserters.fromObject(failedResponses.apply(message.getLogId(), e.getMessage())));
                         }
+                )
+                .doFinally(signalType -> pushService.unPool(key));
+    }
+
+    @NonNull
+    public Mono<ServerResponse> deal(ServerRequest request) {
+        BaseMessage message = new BaseMessage();
+        assembleFromHeader.accept(request, message);
+        request.queryParam("clt_id").ifPresent(clt_id -> {
+            message.setCltId(clt_id);
+            String[] items = clt_id.split(Pattern.quote(CommonConstant.SPLITTER_DOLLAR));
+            if (items.length > 1) {
+                message.setProductId(items[0]);
+                message.setDeviceId(items[1]);
+            }
+        });
+        request.queryParam("msgid").ifPresent(message::setLogId);
+
+        int method = figureOutMethod(request);
+        // pushing needs ack
+        message.setNeedAck(true);
+        List<Integer> idList = new ArrayList<>();
+        String cuid = message.getDeviceId();
+        String sn = message.getSn();
+        String key = pushService.pool(message);
+        return new DirectiveProcessor(ttsService)
+                .processMultiparts(cuid, sn, request.body(BodyExtractors.toParts()), MessageType.PUSH_MESSAGE)
+                .flatMapSequential(directive -> {
+                    DataPointMessage assembled = assembleDirective0(method, directive, IdGenerator.nextId(), key, message);
+                    return pushService.push(assembled).then();
+                })
+                .then(
+                        // waiting the result for 5 seconds at most.
+                        pushService
+                                .check(message, key, idList)
+                                .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(message.getLogId(), "Waiting ack timeout")))
+                                .flatMap(baseResponse -> {
+                                    if (baseResponse.getCode() == 0) {
+                                        return ServerResponse.ok().body(BodyInserters.fromObject(baseResponse));
+                                    } else {
+                                        return ServerResponse.ok().body(
+                                                BodyInserters.fromObject(failedResponses.apply(message.getLogId(), "Pushing message failed"))
+                                        );
+                                    }
+                                })
+                                .onErrorResume(
+                                        e -> {
+                                            log.error("Pushing message to dh2 failed", e);
+                                            return ServerResponse.ok().body(
+                                                    BodyInserters.fromObject(failedResponses.apply(message.getLogId(), e.getMessage())));
+                                        }
+                                )
+                                .doFinally(signalType -> pushService.unPool(key))
                 );
     }
 

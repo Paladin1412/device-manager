@@ -7,6 +7,7 @@ import com.baidu.iot.devicecloud.devicemanager.util.NettyUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.timeout.IdleStateEvent;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.UnicastProcessor;
 
@@ -42,16 +43,14 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) throws Exception {
+    protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) {
         Channel upstreamChannel = ctx.channel();
-        log.debug("The event-link relay server inner channel {} has read a message:\n{}",
-                upstreamChannel.toString(), String.valueOf(msg));
         if (isDownstreamInitPackage(msg)) {
             initialPackageHasArrived = true;
             if (confirmedConnection(msg)) {
                 log.debug("{} has been confirmed by dcs. Subscribing to event requests", upstreamChannel.toString());
                 upstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMED);
-                requestQueue.subscribe(NettyUtil.good2Go(upstreamChannel).<TlvMessage>get());
+                requestQueue.subscribe(NettyUtil.good2Go(upstreamChannel).get());
             } else {
                 upstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.EXCEPTION);
             }
@@ -64,16 +63,13 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
         // do something with the received msg, like requesting tts
 
         if (initialPackageHasArrived) {
+            responseQueue.onNext(msg);
 
             if (isDownstreamFinishPackage(msg)) {
                 log.debug("The downstream finish package(0xF005) has come, completing the work queue");
                 responseQueue.onComplete();
                 // closing this tcp connection to dcs
-                if (upstreamChannel.isActive()) {
-                    upstreamChannel.close();
-                }
-            } else {
-                responseQueue.onNext(msg);
+                closeOnFlush(upstreamChannel);
             }
 
             // don't print the last log
@@ -85,7 +81,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        log.debug("Connected to DCS: {}", ctx.channel().toString());
+        log.debug("The event-link tcp proxy client has connected to DCS: {}", ctx.channel().toString());
         ctx.channel().attr(CONFIRMATION_STATE).set(ConfirmationStates.UNCONFIRMED);
         super.channelActive(ctx);
     }
@@ -106,12 +102,22 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
         closeOnFlush(channel);
     }
 
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        if (evt instanceof IdleStateEvent) {
+            IdleStateEvent e = (IdleStateEvent) evt;
+            log.debug("[{}] Upstream idled, closing the connection.", e.state());
+            ctx.close();
+        }
+        super.userEventTriggered(ctx, evt);
+    }
+
     private void clear() {
-        if (requestQueue != null && !requestQueue.isDisposed()) {
+        if (requestQueue != null && !requestQueue.isTerminated()) {
             requestQueue.onComplete();
             requestQueue.clear();
         }
-        if (responseQueue != null && !responseQueue.isDisposed()) {
+        if (responseQueue != null && !responseQueue.isTerminated()) {
             responseQueue.onComplete();
             responseQueue.clear();
         }

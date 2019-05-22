@@ -1,6 +1,5 @@
 package com.baidu.iot.devicecloud.devicemanager.service.handler;
 
-import com.baidu.iot.devicecloud.devicemanager.adapter.Adapter;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
@@ -17,6 +16,7 @@ import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
 import com.baidu.iot.devicecloud.devicemanager.service.AccessTokenService;
 import com.baidu.iot.devicecloud.devicemanager.service.PushService;
+import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.BinaryNode;
@@ -30,18 +30,18 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.pool.AbstractChannelPoolMap;
-import io.netty.channel.pool.ChannelPoolHandler;
-import io.netty.channel.pool.ChannelPoolMap;
-import io.netty.channel.pool.SimpleChannelPool;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.FutureListener;
+import io.netty.handler.timeout.IdleStateHandler;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
@@ -52,7 +52,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
@@ -107,10 +106,9 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
     private static final byte[] CRLF = {'\r', '\n'};
     private final AccessTokenService accessTokenService;
     private final PushService pushService;
-    private final DirectiveProcessor directiveProcessor;
+    private final TtsService ttsService;
 
     public Cache<String, Optional<String>> cache;
-    private ChannelPoolMap<InetSocketAddress, SimpleChannelPool> poolMap;
     private ExecutorService commonSideExecutor;
 
     @Value("${dcs.proxy.address.evt:}")
@@ -119,15 +117,15 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
     @Autowired
     public DuerEventHandler(AccessTokenService accessTokenService,
                             PushService pushService,
-                            DirectiveProcessor directiveProcessor) {
+                            TtsService ttsService) {
         this.accessTokenService = accessTokenService;
         this.pushService = pushService;
-        this.directiveProcessor = directiveProcessor;
+        this.ttsService = ttsService;
 
         cache = CacheBuilder.newBuilder()
                 .concurrencyLevel(100)
                 .maximumSize(1_000_000)
-                .expireAfterWrite(Duration.ofMinutes(3))
+                .expireAfterAccess(Duration.ofMinutes(1))
                 .recordStats()
                 .removalListener(
                         (RemovalListener<String, Optional<String>>) n ->
@@ -135,46 +133,6 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                                         n.getKey(), n.getValue().orElse("null"), n.getCause().toString())
                 )
                 .build();
-
-        poolMap = new AbstractChannelPoolMap<InetSocketAddress, SimpleChannelPool>() {
-            @Override
-            protected SimpleChannelPool newPool(InetSocketAddress key) {
-                log.debug("Creating new pool for {}", key.toString());
-                return new SimpleChannelPool(
-                        new Bootstrap()
-                                .group(new NioEventLoopGroup())
-                                .channel(NioSocketChannel.class)
-                                .remoteAddress(key),
-                        new ChannelPoolHandler() {
-                            @Override
-                            public void channelReleased(Channel ch) {
-                                log.debug("{} has been released", ch.toString());
-                            }
-
-                            @Override
-                            public void channelAcquired(Channel ch) {
-                                log.debug("{} has been acquired", ch.toString());
-                            }
-
-                            @Override
-                            public void channelCreated(Channel ch) {
-                                log.debug("{} has been created", ch.toString());
-                                ChannelPipeline pipeline = ch.pipeline();
-                                pipeline
-                                        // Inbounds start from below
-                                        .addLast("tlvDecoder", new TlvDecoder())
-                                        // Inbounds stop at above
-
-                                        // Outbounds stop at below
-                                        .addLast("disconnectedHandler", new DisconnectedHandler())
-                                        .addLast("tlvEncoder", new TlvEncoder("dcsProxyClient"))
-                                        // Outbounds start from above
-                                ;
-                            }
-                        }
-                );
-            }
-        };
 
         commonSideExecutor = new ThreadPoolExecutor(0, 50,
                 60L, TimeUnit.SECONDS,
@@ -226,7 +184,6 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
 
     private Flux<BaseResponse> doWork(DataPointMessage message, String accessToken) {
         // Initializing a new connection to DCS proxy for each client connected to the relay server til the client has report the first initial package
-        log.debug("The relay server is connecting to dcs.");
         InetSocketAddress assigned;
         if (StringUtils.hasText(dcsProxyEvtAddress)) {
             String[] items = dcsProxyEvtAddress.split(Pattern.quote(SPLITTER_COLON));
@@ -245,42 +202,62 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         final UnicastProcessor<TlvMessage> requestQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
         // all tlv messages those received from dcs
         final UnicastProcessor<TlvMessage> responseQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
-        final SimpleChannelPool pool = poolMap.get(assigned);
-        Future<Channel> f = pool.acquire();
-        f.addListener((FutureListener<Channel>) channelFuture -> {
-            if (channelFuture.isSuccess()) {
-                final Channel channel = channelFuture.getNow();
-                ChannelPipeline pipelines = channel.pipeline();
-                if (pipelines.get(RELAY_BACK_HANDLER) != null) {
-                    pipelines.remove(RELAY_BACK_HANDLER);
-                }
-                pipelines.addLast(RELAY_BACK_HANDLER, new RelayBackendHandler(requestQueue, responseQueue));
-                writeAndFlush(channel, initPackage.apply(message, accessToken));
-                channel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
 
-                TlvMessage data = dataPackage.apply(message);
-                if (data != null) {
-                    requestQueue.onNext(data);
+        EventLoopGroup workerGroup = new NioEventLoopGroup(1);
+
+        try {
+            Bootstrap b = new Bootstrap();
+            b.group(workerGroup)
+            .channel(NioSocketChannel.class)
+            .option(ChannelOption.SO_KEEPALIVE, true)
+            .handler(new ChannelInitializer<SocketChannel>() {
+                @Override
+                public void initChannel(SocketChannel ch) {
+                    ChannelPipeline pipeline = ch.pipeline();
+                    pipeline
+                            // Inbounds start from below
+                            .addLast("tlvDecoder", new TlvDecoder())
+                            .addLast("idleStateHandler", new IdleStateHandler(25, 5, 0))
+                            .addLast(RELAY_BACK_HANDLER, new RelayBackendHandler(requestQueue, responseQueue))
+                            // Inbounds stop at above
+
+                            // Outbounds stop at below
+                            .addLast("disconnectedHandler", new DisconnectedHandler())
+                            .addLast("tlvEncoder", new TlvEncoder("dcsProxyClient"));
+                    // Outbounds start from above
                 }
-                requestQueue.onNext(finishPackage.apply(message));
+            });
+
+            // Start the client.
+            final ChannelFuture cf = b.connect(assigned);
+            cf.addListener(future -> {
+                if (future.isSuccess()) {
+                    Channel channel = cf.channel();
+                    writeAndFlush(channel, initPackage.apply(message, accessToken));
+                    channel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
+
+                    TlvMessage data = dataPackage.apply(message);
+                    if (data != null) {
+                        requestQueue.onNext(data);
+                    }
+                    requestQueue.onNext(finishPackage.apply(message));
+                } else {
+                    responseQueue.onComplete();
+                }
                 requestQueue.onComplete();
-                pool.release(channel);
-            }
-        });
+            });
+            // should block here
+            // noinspection BlockingMethodInNonBlockingContext
+            cf.channel().closeFuture().sync();
+        } catch (InterruptedException e) {
+            log.error("Closing the proxy tcp client failed", e);
+            requestQueue.onComplete();
+            responseQueue.onComplete();
+        } finally {
+            workerGroup.shutdownGracefully();
+        }
 
-        return deal(Flux.push(fluxSink -> responseQueue.subscribe(
-                new BaseSubscriber<TlvMessage>() {
-                    @Override
-                    protected void hookOnNext(TlvMessage value) {
-                        fluxSink.next(value);
-                    }
-
-                    @Override
-                    protected void hookOnComplete() {
-                        fluxSink.complete();
-                    }
-                }
-        )), message);
+        return deal(responseQueue, message);
     }
 
     private final BiFunction<DataPointMessage, String, TlvMessage> initPackage =
@@ -342,7 +319,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             multipartBody.writeTo(buffer);
             long vlen = buffer.size();
             byte[] content = buffer.readByteArray();
-            log.debug("multipartBody:\n{}", new String(content, Charsets.UTF_8));
+//            log.debug("multipartBody:\n{}", new String(content, Charsets.UTF_8));
             return new TlvMessage(TlvConstant.TYPE_UPSTREAM_DUMI, vlen, content);
         } catch (IOException e) {
             log.error("Assembling the data package failed", e);
@@ -412,9 +389,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
     private Flux<BaseResponse> deal(Flux<TlvMessage> messageFlux, DataPointMessage origin) {
         String cuid = origin.getDeviceId();
         String sn = origin.getSn();
-        return messageFlux
-                .flatMapSequential(tlv -> directiveProcessor.process(cuid, sn, tlv))
-                .flatMapSequential(directive -> Flux.just(Adapter.directive2DataPoint(directive, origin)))
+        return new DirectiveProcessor(ttsService).processEvent(cuid, sn, messageFlux, origin)
                 .flatMapSequential(pushService::push)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {

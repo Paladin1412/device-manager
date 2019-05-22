@@ -36,8 +36,8 @@ public class TtsService {
     public void requestTTSAsync(TtsRequest message, boolean isPre, Map<String, String> keysMap) {
         CompletableFuture<Response> future = client.requestTtsAsync(message, isPre, keysMap);
         future.handle(((response, throwable) -> {
-            if (response.isSuccessful()) {
-                log.debug("TTS Proxy async request succeed.");
+            if (response != null && response.isSuccessful()) {
+                log.debug("TTS Proxy async request succeed. response: {}", response);
             }
             return null;
         }));
@@ -66,11 +66,11 @@ public class TtsService {
         return urlmap;
     }
 
-    public Map<String, String> requestAudioUrl(String cuid, String sn, String cid) {
+    public Map<String, String> requestAudioUrl(String cuid, String sn, String cid, int messageType) {
         Map<String, String> urlmap = new HashMap<>();
         Response response = null;
         try {
-            response = client.requestAudioUrl(cuid, sn, cid);
+            response = client.requestAudioUrl(cuid, sn, cid, messageType);
             if (response != null && response.isSuccessful()) {
                 ResponseBody body = response.body();
                 if (body != null) {

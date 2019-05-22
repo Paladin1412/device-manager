@@ -5,8 +5,8 @@ import com.baidu.iot.devicecloud.devicemanager.codec.TlvEncoder;
 import com.baidu.iot.devicecloud.devicemanager.config.localserver.TcpRelayServerConfig;
 import com.baidu.iot.devicecloud.devicemanager.constant.ConfirmationStates;
 import com.baidu.iot.devicecloud.devicemanager.handler.tcp.RelayFrontendHandler;
-import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
 import com.baidu.iot.devicecloud.devicemanager.service.AccessTokenService;
+import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -65,7 +65,7 @@ public class TcpRelayServer {
     public static final AttributeKey<String> CUID = AttributeKey.valueOf("cuid");
     public static final AttributeKey<String> SN = AttributeKey.valueOf("sn");
     private final AccessTokenService accessTokenService;
-    private final DirectiveProcessor directiveProcessor;
+    private final TtsService ttsService;
     private final TcpRelayServerConfig config;
 
     private ChannelFuture channelFuture;
@@ -78,10 +78,10 @@ public class TcpRelayServer {
 
     @Autowired
     public TcpRelayServer(AccessTokenService accessTokenService,
-                          DirectiveProcessor directiveProcessor,
+                          TtsService ttsService,
                           TcpRelayServerConfig config) {
         this.accessTokenService = accessTokenService;
-        this.directiveProcessor = directiveProcessor;
+        this.ttsService = ttsService;
         this.config = config;
     }
 
@@ -109,11 +109,11 @@ public class TcpRelayServer {
                 .handler(new LoggingHandler(LogLevel.DEBUG))
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
-                    protected void initChannel(SocketChannel ch) throws Exception {
+                    protected void initChannel(SocketChannel ch) {
                         ch.pipeline()
                                 .addLast("tlvDecoder", new TlvDecoder())
                                 .addLast("idleStateHandler", new IdleStateHandler(config.dmTcpTimeoutIdle, 0, 0))
-                                .addLast("relayHandler", new RelayFrontendHandler(accessTokenService, directiveProcessor, dcsProxyAsr, config))
+                                .addLast("relayHandler", new RelayFrontendHandler(accessTokenService, ttsService, dcsProxyAsr, config))
 
                                 .addLast("tlvEncoder", new TlvEncoder("Relay server"));
                     }

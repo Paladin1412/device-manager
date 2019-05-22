@@ -8,8 +8,8 @@ import com.baidu.iot.devicecloud.devicemanager.codec.TlvEncoder;
 import com.baidu.iot.devicecloud.devicemanager.config.localserver.TcpRelayServerConfig;
 import com.baidu.iot.devicecloud.devicemanager.constant.ConfirmationStates;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
-import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
 import com.baidu.iot.devicecloud.devicemanager.service.AccessTokenService;
+import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
@@ -26,7 +26,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -68,7 +67,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
     private Channel outboundChannel;
 
     private final AccessTokenService accessTokenService;
-    private final DirectiveProcessor directiveProcessor;
+    private final TtsService ttsService;
     private final InetSocketAddress assignedAsrAddress;
     private final TcpRelayServerConfig config;
 
@@ -80,12 +79,12 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
     private String sn;
 
     public RelayFrontendHandler(AccessTokenService accessTokenService,
-                                DirectiveProcessor directiveProcessor,
+                                TtsService ttsService,
                                 InetSocketAddress assignedAsrAddress,
                                 TcpRelayServerConfig config) {
         super();
         this.accessTokenService = accessTokenService;
-        this.directiveProcessor = directiveProcessor;
+        this.ttsService = ttsService;
         this.assignedAsrAddress = assignedAsrAddress;
         this.config = config;
 
@@ -130,8 +129,8 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                             ch.pipeline()
                                     // Inbounds start from below
                                     .addLast("tlvDecoder", new TlvDecoder())
-                                    .addLast("idleStateHandler", new IdleStateHandler(config.dmTcpTimeoutIdle, 0, 0))
-                                    .addLast(new RelayBackendHandler(inboundChannel, workQueue, directiveProcessor))
+                                    .addLast("idleStateHandler", new IdleStateHandler(config.dmTcpTimeoutIdle, config.dmTcpTimeoutIdle, 0))
+                                    .addLast(new RelayBackendHandler(inboundChannel, workQueue, ttsService))
                                     // Inbounds stop at above
 
                                     // Outbounds stop at below
@@ -188,7 +187,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         log.debug("The asr has logged out.");
-        workQueue.clear();
+        clearWorkQueue();
         if (outboundChannel != null) {
             closeOnFlush(outboundChannel);
         }
@@ -200,7 +199,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
         Channel channel = ctx.channel();
         log.error("Caught an exception on the asr-link channel({})", channel, cause);
         log.error("The stack traces listed below", cause);
-        workQueue.clear();
+        clearWorkQueue();
         closeOnFlush(channel);
     }
 
@@ -208,10 +207,8 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent) {
             IdleStateEvent e = (IdleStateEvent) evt;
-            if (e.state() == IdleState.READER_IDLE) {
-                log.debug("Downstream's reader idled, closing the connection.");
-                ctx.close();
-            }
+            log.debug("[{}] Upstream idled, closing the connection.", e.state());
+            ctx.close();
         }
         super.userEventTriggered(ctx, evt);
     }
@@ -292,6 +289,13 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
         }
         if (StringUtils.hasText(sn)) {
             channel.attr(SN).set(sn);
+        }
+    }
+
+    private void clearWorkQueue() {
+        if (workQueue != null && !workQueue.isDisposed()) {
+            workQueue.onComplete();
+            workQueue.clear();
         }
     }
 }
