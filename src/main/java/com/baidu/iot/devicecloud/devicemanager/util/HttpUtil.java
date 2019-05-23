@@ -5,8 +5,6 @@ import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.LocalServerInfo;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
-import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenRequest;
-import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenResponse;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
 import com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
@@ -55,23 +53,20 @@ public class HttpUtil {
         }
     }
 
-    public static Predicate<Response> isDcsOk = response -> {
-        if (response == null) {
-            return false;
-        }
-        ResponseBody body = response.body();
-        if (response.isSuccessful() && body != null) {
-            try {
+    private static Predicate<Response> isDcsOk = response -> {
+        try(ResponseBody body = response.body()){
+            if (response.isSuccessful() && body != null) {
                 JsonNode resp = JsonUtil.readTree(body.bytes());
                 if (resp != null) {
                     log.debug("Dcs responses: {}", resp.toString());
                     return !resp.isNull() && resp.has(PAM_PARAM_STATUS)
                             && resp.get(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE;
                 }
-            } catch (IOException e) {
-                log.error("Checking if the dcs response ok failed", e);
             }
+        } catch (IOException e) {
+            log.error("Checking if the dcs response ok failed", e);
         }
+
         return false;
     };
 
@@ -183,10 +178,6 @@ public class HttpUtil {
                             } catch (NumberFormatException ignore) {}
                         }
                 );
-
-                /*Optional.ofNullable(getFirst(request, CommonConstant.HEADER_NEED_ACK)).ifPresent(
-                        needAck -> message.setNeedAck(Boolean.valueOf(needAck))
-                );*/
             };
 
     @Nullable
@@ -197,16 +188,10 @@ public class HttpUtil {
     }
 
     @Nullable
-    public static AccessTokenResponse getTokenFromRedis(final AccessTokenRequest tokenRequest) {
-        return getTokenFromRedis(tokenRequest.getCuid());
-    }
-
-    @Nullable
-    public static AccessTokenResponse getTokenFromRedis(final String cuid) {
+    public static String getTokenFromRedis(final String cuid) {
         return DproxyClientProvider
                 .getInstance()
-                .hget(CommonConstant.SESSION_KEY_PREFIX + cuid,
-                        CommonConstant.SESSION_DEVICE_ACCESS_TOKEN, AccessTokenResponse.class);
+                .get(CommonConstant.SESSION_KEY_PREFIX + cuid);
     }
 
     public static void deleteTokenFromRedis(final String cuid) {
@@ -220,13 +205,6 @@ public class HttpUtil {
         return DproxyClientProvider
                 .getInstance()
                 .exists(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectId);
-    }
-
-    public static boolean refreshAccessTokenRedis(final String cuid, long expire) {
-        return DproxyClientProvider
-                .getInstance()
-                .expire(CommonConstant.SESSION_KEY_PREFIX + cuid,
-                        expire);
     }
 
     @Nullable

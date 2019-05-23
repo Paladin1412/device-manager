@@ -64,7 +64,6 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant
 import static com.baidu.iot.devicecloud.devicemanager.util.BufferUtil.joinBuffers;
 import static com.baidu.iot.devicecloud.devicemanager.util.DirectiveUtil.addExtraInfo;
 import static com.baidu.iot.devicecloud.devicemanager.util.DirectiveUtil.assembleDuerPrivateDirective;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isPreTTSTlv;
 
 /**
@@ -143,7 +142,7 @@ public class DirectiveProcessor {
                                                             candidate = decoderSupplier.get();
                                                         }
                                                         // TODO composites te Flux<Part>
-                                                        return processMultiparts(cuid, sn, candidate.decode(bytes), MessageType.BASE)
+                                                        return processMultiparts(cuid, sn, candidate.decode(bytes), MessageType.BASE, true)
                                                                 .flatMap(directive -> Mono.justOrEmpty(Adapter.directive2DataPointTLV(directive, groupKey)));
                                                     }
 
@@ -158,7 +157,7 @@ public class DirectiveProcessor {
                                 }
                                 case TlvConstant.TYPE_DOWNSTREAM_DUMI: {
                                     MultipartStreamDecoder decoderDumi = decoderSupplier.get();
-                                    return processMultiparts(cuid, sn, parseParts(decoderDumi, group), MessageType.BASE)
+                                    return processMultiparts(cuid, sn, parseParts(decoderDumi, group), MessageType.BASE, true)
                                             .flatMap(directive -> {
                                                 log.debug("Publishing asr directive:\n{}", directive);
                                                 return Mono.justOrEmpty(Adapter.directive2DataPointTLV(directive, groupKey));
@@ -198,7 +197,7 @@ public class DirectiveProcessor {
                                                         candidate = decoderSupplier.get();
                                                     }
                                                     // TODO composites te Flux<Part>
-                                                    return processMultiparts(cuid, sn, candidate.decode(tlv), MessageType.DATA_POINT)
+                                                    return processMultiparts(cuid, sn, candidate.decode(tlv), MessageType.DATA_POINT, false)
                                                             .flatMap(directive -> Mono.justOrEmpty(Adapter.directive2DataPoint(directive, origin)));
                                                 }
                                                 TtsRequest request = assembleTtsRequest(cuid, sn, bytes, origin.getMessageType());
@@ -212,7 +211,7 @@ public class DirectiveProcessor {
                                 }
                                 case TlvConstant.TYPE_DOWNSTREAM_DUMI: {
                                     MultipartStreamDecoder decoderDumi = decoderSupplier.get();
-                                    return processMultiparts(cuid, sn, parseParts(decoderDumi, group), origin.getMessageType())
+                                    return processMultiparts(cuid, sn, parseParts(decoderDumi, group), origin.getMessageType(), false)
                                             .flatMap(directive -> {
                                                 log.debug("Publishing event directive:\n{}", directive);
                                                 return Mono.justOrEmpty(Adapter.directive2DataPoint(directive, origin));
@@ -298,10 +297,10 @@ public class DirectiveProcessor {
      * @param parts the encapsulated {@link MultipartStream}
      * @return {@link Flux}&lt;{@link JsonNode}&gt;
      */
-    public Flux<JsonNode> processMultiparts(String cuid, String sn, Flux<Part> parts, int messageType) {
+    public Flux<JsonNode> processMultiparts(String cuid, String sn, Flux<Part> parts, int messageType, boolean needAppendDialogueFinished) {
         Map<String, String> ids = new HashMap<>();
         AtomicInteger index = new AtomicInteger(0);
-        return parts
+        Flux<JsonNode> directives = parts
                 .flatMapSequential(part -> {
                     String name = part.name();
                     HttpHeaders headers = part.headers();
@@ -341,12 +340,15 @@ public class DirectiveProcessor {
                 .flatMap(directive -> {
                     visitMetadata(cuid, sn, directive, messageType);
                     return Flux.just(directive);
-                })
-                .concatWith(Mono.defer(() -> Mono.just(assembleDuerPrivateDirective(
-                        PRIVATE_PROTOCOL_DIALOGUE_FINISHED,
-                        ids.get(REQUEST_ID),
-                        ids.get(MESSAGE_ID),
-                        index.incrementAndGet()))));
+                });
+        if (needAppendDialogueFinished) {
+            return directives.concatWith(Mono.defer(() -> Mono.just(assembleDuerPrivateDirective(
+                    PRIVATE_PROTOCOL_DIALOGUE_FINISHED,
+                    ids.get(REQUEST_ID),
+                    ids.get(MESSAGE_ID),
+                    index.incrementAndGet()))));
+        }
+        return directives;
     }
 
     private TtsRequest assembleTtsRequest(String cuid, String sn, byte[] bytes, int messageType) {
@@ -389,27 +391,22 @@ public class DirectiveProcessor {
                     ttsService.cacheAudioAsync(ttsRequest, contentId, getBaseName(assembleKey(cuid, sn, contentId)));
             future.handleAsync(
                     (r, t) -> {
-                        if (r != null && r.isSuccessful()) {
-                            ResponseBody body = r.body();
-                            if (body != null) {
+                        try(ResponseBody body = r.body()) {
+                            if (r.isSuccessful() && body != null) {
                                 Map<String, String> urlmap = new HashMap<>();
-                                try {
-                                    ttsService.decodeTtsProxyResponse(body.string(), urlmap);
-                                    urlmap.entrySet()
-                                            .parallelStream()
-                                            .forEach(entry -> {
-                                                String key = assembleKey(cuid, sn, entry.getKey());
-                                                String url = entry.getValue();
-                                                if (StringUtils.hasText(url) && !url.equals(speakUrls.getIfPresent(key))) {
-                                                    speakUrls.put(key, entry.getValue());
-                                                }
-                                            });
-                                } catch (IOException e) {
-                                    log.error("Requesting tts in async way failed", e);
-                                } finally {
-                                    close(r);
-                                }
+                                ttsService.decodeTtsProxyResponse(body.string(), urlmap);
+                                urlmap.entrySet()
+                                        .parallelStream()
+                                        .forEach(entry -> {
+                                            String key = assembleKey(cuid, sn, entry.getKey());
+                                            String url = entry.getValue();
+                                            if (StringUtils.hasText(url) && !url.equals(speakUrls.getIfPresent(key))) {
+                                                speakUrls.put(key, entry.getValue());
+                                            }
+                                        });
                             }
+                        } catch (IOException e) {
+                            log.error("Requesting tts in async way failed", e);
                         }
                         return null;
                     }

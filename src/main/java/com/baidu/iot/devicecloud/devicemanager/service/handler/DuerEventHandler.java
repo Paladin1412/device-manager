@@ -1,11 +1,9 @@
 package com.baidu.iot.devicecloud.devicemanager.service.handler;
 
-import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
-import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenResponse;
 import com.baidu.iot.devicecloud.devicemanager.codec.TlvDecoder;
 import com.baidu.iot.devicecloud.devicemanager.codec.TlvEncoder;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
@@ -25,9 +23,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.RemovalListener;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -54,7 +49,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.SignalType;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
 
@@ -62,7 +56,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -101,14 +94,12 @@ import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlu
 @Slf4j
 @Component
 public class DuerEventHandler extends AbstractLinkableDataPointHandler {
-    private static final String KEY_PATTERN = "%s_%s_%s";
     private static final String RELAY_BACK_HANDLER = "relayBackendHandler";
     private static final byte[] CRLF = {'\r', '\n'};
     private final AccessTokenService accessTokenService;
     private final PushService pushService;
     private final TtsService ttsService;
 
-    public Cache<String, Optional<String>> cache;
     private ExecutorService commonSideExecutor;
 
     @Value("${dcs.proxy.address.evt:}")
@@ -121,18 +112,6 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         this.accessTokenService = accessTokenService;
         this.pushService = pushService;
         this.ttsService = ttsService;
-
-        cache = CacheBuilder.newBuilder()
-                .concurrencyLevel(100)
-                .maximumSize(1_000_000)
-                .expireAfterAccess(Duration.ofMinutes(1))
-                .recordStats()
-                .removalListener(
-                        (RemovalListener<String, Optional<String>>) n ->
-                                log.debug("Removed Access Token: ({}, {}), caused by: {}",
-                                        n.getKey(), n.getValue().orElse("null"), n.getCause().toString())
-                )
-                .build();
 
         commonSideExecutor = new ThreadPoolExecutor(0, 50,
                 60L, TimeUnit.SECONDS,
@@ -150,23 +129,13 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             return Mono.just(emptyResponses.apply(message));
         }
 
-        String cuid = message.getDeviceId();
-        String pid = message.getProductId();
-        String sn = message.getSn();
-        String key = String.format(KEY_PATTERN, cuid, pid, sn);
-        Optional<String> optAccessToken;
-        try {
-            optAccessToken = cache.get(key, () -> loadAccessToken(message));
-        } catch (Exception e) {
-            return Mono.error(e);
-        }
-        if (!optAccessToken.isPresent()) {
-            cache.invalidate(key);
+        String accessToken = accessTokenService.getAccessToken(message.getDeviceId(), message.getLogId());
+        if (StringUtils.isEmpty(accessToken)) {
             return Mono.just(unauthorizedResponses.apply(message));
         }
 
         CompletableFuture<Flux<BaseResponse>> future =
-                CompletableFuture.supplyAsync(() -> doWork(message, optAccessToken.get()), commonSideExecutor);
+                CompletableFuture.supplyAsync(() -> doWork(message, accessToken), commonSideExecutor);
         future.handleAsync(
                 (r, t) -> r
                         /*.timeout(
@@ -377,25 +346,10 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         return response;
     };
 
-    private Optional<String> loadAccessToken(BaseMessage message) {
-        AccessTokenResponse response = accessTokenService.try2ObtainAccessToken(message);
-        if (response != null && StringUtils.hasText(response.getAccessToken())) {
-            return Optional.of(response.getAccessToken());
-        }
-        log.error("This device({})'s login session has been expired.", message.getDeviceId());
-        return Optional.empty();
-    }
-
     private Flux<BaseResponse> deal(Flux<TlvMessage> messageFlux, DataPointMessage origin) {
         String cuid = origin.getDeviceId();
         String sn = origin.getSn();
         return new DirectiveProcessor(ttsService).processEvent(cuid, sn, messageFlux, origin)
-                .flatMapSequential(pushService::push)
-                .doFinally(signalType -> {
-                    if (signalType == SignalType.ON_COMPLETE) {
-                        log.debug("Finally, refreshing the access token");
-                        accessTokenService.refreshAccessToken(origin);
-                    }
-                });
+                .flatMapSequential(pushService::push);
     }
 }

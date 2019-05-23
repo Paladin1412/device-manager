@@ -63,6 +63,8 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) {
         Channel upstreamChannel = ctx.channel();
+        log.debug("The asr-link relay server inner channel {} has read a message:\n{}",
+                upstreamChannel, msg);
         if (isDownstreamInitPackage(msg)) {
             initialPackageHasArrived = true;
             if (confirmedConnection(msg)) {

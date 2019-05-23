@@ -16,7 +16,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/31.
@@ -49,9 +48,7 @@ public class TtsService {
 
     public Map<String, String> requestTTSSync(TtsRequest message, boolean isPre, Map<String, String> keysMap) {
         Map<String, String> urlmap = new HashMap<>();
-        Response response = null;
-        try {
-            response = client.requestTtsSync(message, isPre, keysMap);
+        try(Response response = client.requestTtsSync(message, isPre, keysMap)) {
             if (response != null && response.isSuccessful() && !isPre) {
                 ResponseBody body = response.body();
                 if (body != null) {
@@ -60,17 +57,13 @@ public class TtsService {
             }
         } catch (Exception e) {
             log.error("Requesting tts in a sync way failed", e);
-        } finally {
-            close(response);
         }
         return urlmap;
     }
 
     public Map<String, String> requestAudioUrl(String cuid, String sn, String cid, int messageType) {
         Map<String, String> urlmap = new HashMap<>();
-        Response response = null;
-        try {
-            response = client.requestAudioUrl(cuid, sn, cid, messageType);
+        try(Response response = client.requestAudioUrl(cuid, sn, cid, messageType)) {
             if (response != null && response.isSuccessful()) {
                 ResponseBody body = response.body();
                 if (body != null) {
@@ -79,8 +72,6 @@ public class TtsService {
             }
         } catch (Exception e) {
             log.error("Requesting tts url in a sync way failed", e);
-        } finally {
-            close(response);
         }
         return urlmap;
     }

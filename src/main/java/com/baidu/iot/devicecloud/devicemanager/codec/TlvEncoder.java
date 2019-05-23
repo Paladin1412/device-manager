@@ -33,8 +33,8 @@ public class TlvEncoder extends MessageToByteEncoder<TlvMessage> {
     }
 
     @Override
-    protected void encode(ChannelHandlerContext ctx, TlvMessage msg, ByteBuf out) throws Exception {
-        log.debug("-----------------This is {}'s encoder, byte order is {}", name, byteOrder);
+    protected void encode(ChannelHandlerContext ctx, TlvMessage msg, ByteBuf out) {
+        log.debug("This is {}'s encoder, byte order is {}", name, byteOrder);
         int type = msg.getType();
         log.debug("Encoding type: {}({})", type, String.format("0x%04X", type));
         int intLen = Math.toIntExact(msg.getLength());

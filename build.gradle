@@ -27,6 +27,7 @@ dependencies {
 	compile group: 'com.google.guava', name: 'guava', version: '27.0.1-jre'
 	// https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp
 	compile group: 'com.squareup.okhttp3', name: 'okhttp', version: '3.13.1'
+	compile group: 'com.squareup.okhttp3', name: 'logging-interceptor', version: '3.13.1'
 	// https://mvnrepository.com/artifact/commons-fileupload/commons-fileupload
 	compile group: 'commons-fileupload', name: 'commons-fileupload', version: '1.4'
 	// https://mvnrepository.com/artifact/commons-codec/commons-codec

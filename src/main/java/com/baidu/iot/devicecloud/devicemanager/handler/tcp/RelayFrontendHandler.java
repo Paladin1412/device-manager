@@ -2,7 +2,6 @@ package com.baidu.iot.devicecloud.devicemanager.handler.tcp;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
-import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenResponse;
 import com.baidu.iot.devicecloud.devicemanager.codec.TlvDecoder;
 import com.baidu.iot.devicecloud.devicemanager.codec.TlvEncoder;
 import com.baidu.iot.devicecloud.devicemanager.config.localserver.TcpRelayServerConfig;
@@ -14,10 +13,9 @@ import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
 import com.fasterxml.jackson.databind.node.IntNode;
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -29,13 +27,12 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.lang.NonNull;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
 
 import java.net.InetSocketAddress;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_BEARER;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_DUEROS_DEVICE_ID;
@@ -73,8 +70,6 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
 
     private final UnicastProcessor<TlvMessage> workQueue;
 
-    private Cache<String, String> accessTokenCache;
-
     private String cuid;
     private String sn;
 
@@ -91,12 +86,6 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
         // here shouldn't be so many messages, so use xs().
         this.workQueue =
                 UnicastProcessor.create(Queues.<TlvMessage>xs().get());
-
-        accessTokenCache =
-                CacheBuilder
-                        .newBuilder()
-                        .expireAfterWrite(10, TimeUnit.SECONDS)
-                        .build();
     }
 
     @Override
@@ -108,15 +97,23 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) {
-//        log.debug("The asr-link relay server has read a message: {}", msg);
+        final Channel inboundChannel = ctx.channel();
+        log.debug("The asr-link relay channel {} has read a message:\n{}", inboundChannel, msg);
 
         // server is expecting the first initial package: 0x0001
         // everything arrived before the first initial package will be ignored
         if (!initialPackageHasArrived && isUpstreamInitPackage(msg)) {
+            initialPackageHasArrived = true;
             // 0x0001 showed up for the first time, initialize a new connection to DCS proxy
-            final Channel inboundChannel = ctx.channel();
             // change the channel's confirmation state
             inboundChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
+
+            JsonNode valueNode = decodeAsJson(msg);
+            JsonNode paramNode = readParam(valueNode.path(JSON_KEY_PARAM));
+            if (paramNode != null) {
+                this.cuid = paramNode.path(JSON_KEY_DUEROS_DEVICE_ID).asText();
+                this.sn = valueNode.path(JSON_KEY_SN).asText();
+            }
 
             // Initializing a new connection to DCS proxy for each client connected to the relay server til the client has report the first initial package
             Bootstrap dcsProxyClient = new Bootstrap();
@@ -152,18 +149,19 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                 log.error("Couldn't find any dcs address");
                 return;
             }
+
             ChannelFuture channelFuture = dcsProxyClient.connect(assigned);
+            outboundChannel = channelFuture.channel();
             channelFuture.addListener((ChannelFutureListener) future -> {
                 if (future.isSuccess()) {
-                    decorate(msg);
+                    if (StringUtils.hasText(cuid)) {
+                        decorate(msg, valueNode);
+                    }
                     writeAndFlush(outboundChannel, msg);
                     outboundChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
                     tagChannel(outboundChannel);
                 }
             });
-            outboundChannel = channelFuture.channel();
-
-            initialPackageHasArrived = true;
 
             // or expecting next message
             return;
@@ -213,74 +211,70 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
         super.userEventTriggered(ctx, evt);
     }
 
-    /**
-     * Obtain access token
-     *
-     * @param tlv the message would be fixed
-     */
-    private void decorate(TlvMessage tlv) {
+    @NonNull
+    private JsonNode decodeAsJson(TlvMessage tlv) {
         if (tlv != null) {
             BinaryNode valueBin = tlv.getValue();
             if (valueBin == null) {
                 log.error("No value found");
-                return;
+                return NullNode.getInstance();
             }
-            ObjectNode valueNode;
-            try {
-                valueNode = (ObjectNode) JsonUtil.readTree(valueBin.binaryValue());
-            } catch (Exception e) {
-                log.error("Read value as tree error");
-                return;
-            }
-            if (valueNode == null) {
-                return;
-            }
-            JsonNode param = valueNode.path(JSON_KEY_PARAM);
-            if (param.isNull()) {
-                log.error("No 'param' field");
-                return;
-            }
-            ObjectNode paramNode = null;
-            if (param.isObject()) {
-                paramNode = (ObjectNode) param;
-            } else if (param.isTextual()) {
-                String paramText = param.asText();
-//                log.debug("paramText: {}", paramText);
-                paramNode = (ObjectNode) JsonUtil.readTree(paramText);
-            }
-            if (paramNode == null) {
-                log.error("No param value found");
-                return;
-            }
-            String cuid = paramNode.path(JSON_KEY_DUEROS_DEVICE_ID).asText();
-            String sn = valueNode.path(JSON_KEY_SN).asText();
-            if (StringUtils.hasText(cuid)) {
-                this.cuid = cuid;
-                this.sn = sn;
-                try {
-                    // supply access token
-                    String accessToken =
-                            accessTokenCache.get(String.format("%s_%s", cuid, sn),
-                                    () -> Optional.ofNullable(accessTokenService.try2ObtainAccessToken(cuid, sn))
-                                            .orElseGet(AccessTokenResponse::new).getAccessToken());
-                    log.debug("Decorate access token for the initial package: {}", accessToken);
-                    // append access token to param
-                    paramNode.set(PAM_PARAM_AUTHORIZATION, TextNode.valueOf(PARAMETER_BEARER + accessToken));
-                    if (!paramNode.has(PAM_PARAM_LINK_VERSION)) {
-                        paramNode.set(PAM_PARAM_LINK_VERSION, IntNode.valueOf(2));
-                    }
-                    valueNode.set(JSON_KEY_PARAM, TextNode.valueOf(JsonUtil.serialize(paramNode)));
-
-                    BinaryNode valueBinUpdated = BinaryNode.valueOf(JsonUtil.writeAsBytes(valueNode));
-                    tlv.setValue(valueBinUpdated);
-
-                    // recalculate length
-                    tlv.setLength(valueBinUpdated.binaryValue().length);
-                } catch (Exception e) {
-                    log.error("Decorating the access token for the up-stream init package failed", e);
-                }
-            }
+            return JsonUtil.readTree(valueBin.binaryValue());
         }
+        return NullNode.getInstance();
+    }
+
+    /**
+     * Decorate access token for the initial package
+     *
+     * @param tlv the message would be fixed
+     */
+    private void decorate(TlvMessage tlv, JsonNode jsonNode) {
+        ObjectNode valueNode = (ObjectNode) jsonNode;
+        JsonNode param = valueNode.path(JSON_KEY_PARAM);
+        if (param.isNull()) {
+            log.error("No 'param' field");
+            return;
+        }
+
+        ObjectNode paramNode = readParam(param);
+
+        if (paramNode == null) {
+            log.error("No param value found");
+            return;
+        }
+
+        try {
+            // supply access token
+            String accessToken = accessTokenService.getAccessToken(cuid, sn);
+            log.debug("Decorate access token for the initial package: {}", accessToken);
+            // append access token to param
+            paramNode.set(PAM_PARAM_AUTHORIZATION, TextNode.valueOf(PARAMETER_BEARER + accessToken));
+            if (!paramNode.has(PAM_PARAM_LINK_VERSION)) {
+                paramNode.set(PAM_PARAM_LINK_VERSION, IntNode.valueOf(2));
+            }
+            valueNode.set(JSON_KEY_PARAM, TextNode.valueOf(JsonUtil.serialize(paramNode)));
+
+            BinaryNode valueBinUpdated = BinaryNode.valueOf(JsonUtil.writeAsBytes(valueNode));
+            tlv.setValue(valueBinUpdated);
+
+            // recalculate length
+            tlv.setLength(valueBinUpdated.binaryValue().length);
+        } catch (Exception e) {
+            log.error("Decorating the access token for the upstream init package failed", e);
+        }
+    }
+
+    private ObjectNode readParam(JsonNode param) {
+        ObjectNode paramNode = null;
+        if (param.isObject()) {
+            paramNode = (ObjectNode) param;
+        } else if (param.isTextual()) {
+            String paramText = param.asText();
+//                log.debug("paramText: {}", paramText);
+            paramNode = (ObjectNode) JsonUtil.readTree(paramText);
+        }
+        return paramNode;
     }
 
     private void tagChannel(Channel channel) {

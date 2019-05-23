@@ -1,7 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.handler.http;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
-import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant;
@@ -18,7 +17,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.codec.multipart.Part;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -30,18 +28,15 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
-import static com.baidu.iot.devicecloud.devicemanager.adapter.Adapter.try2appendDialogueFinished;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_PUT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_NEED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_SECRET_KEY;
-import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_AUDIO;
-import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_METADATA;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_CLIENT_ID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_MESSAGE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.assembleFromHeader;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
@@ -65,70 +60,10 @@ public class PushHandler {
     }
 
     @NonNull
-    public Mono<ServerResponse> deal1(ServerRequest request) {
-        BaseMessage message = new BaseMessage();
-        assembleFromHeader.accept(request, message);
-        request.queryParam("clt_id").ifPresent(clt_id -> {
-            message.setCltId(clt_id);
-            String[] items = clt_id.split(Pattern.quote(CommonConstant.SPLITTER_DOLLAR));
-            if (items.length > 1) {
-                message.setProductId(items[0]);
-                message.setDeviceId(items[1]);
-            }
-        });
-        request.queryParam("msgid").ifPresent(message::setLogId);
-
-        int method = figureOutMethod(request);
-        // pushing needs ack
-        message.setNeedAck(true);
-        List<Integer> idList = new ArrayList<>();
-        String key = pushService.pool(message);
-        return request.body(BodyExtractors.toMultipartData())
-                .flatMap(parts -> {
-                    // The order of directives would be sent to device
-                    List<Part> metadata = parts.getOrDefault(PARAMETER_METADATA, new ArrayList<>());
-                    if (metadata.size() < 1) {
-                        return Mono.empty();
-                    }
-                    List<Part> audio = parts.getOrDefault(PARAMETER_AUDIO, new ArrayList<>());
-
-                    List<DataPointMessage> messages = assemble(method, metadata, audio, idList, key, message);
-                    return pushService.push(messages)
-                            .flatMap(baseResponse -> {
-                                if (baseResponse.getCode() == 0) {
-                                    // waiting the result for 5 seconds.
-                                    Mono<BaseResponse> responseMono = pushService.check(message, key, idList)
-                                            .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(message.getLogId(), "Waiting ack timeout")))
-                                            .onErrorResume(
-                                                    e -> {
-                                                        log.error("Checking the acknowledges failed", e);
-                                                        return Mono.just(failedResponses.apply(message.getLogId(), e.getMessage()));
-                                                    }
-                                            );
-
-                                    return ServerResponse.ok().body(responseMono, BaseResponse.class);
-                                } else {
-                                    return ServerResponse.ok().body(
-                                            BodyInserters.fromObject(failedResponses.apply(message.getLogId(), "Pushing message failed"))
-                                    );
-                                }
-                            });
-                })
-                .onErrorResume(
-                        e -> {
-                            log.error("Pushing message to dh2 failed", e);
-                            return ServerResponse.ok().body(
-                                    BodyInserters.fromObject(failedResponses.apply(message.getLogId(), e.getMessage())));
-                        }
-                )
-                .doFinally(signalType -> pushService.unPool(key));
-    }
-
-    @NonNull
     public Mono<ServerResponse> deal(ServerRequest request) {
         BaseMessage message = new BaseMessage();
         assembleFromHeader.accept(request, message);
-        request.queryParam("clt_id").ifPresent(clt_id -> {
+        request.queryParam(PARAMETER_CLIENT_ID).ifPresent(clt_id -> {
             message.setCltId(clt_id);
             String[] items = clt_id.split(Pattern.quote(CommonConstant.SPLITTER_DOLLAR));
             if (items.length > 1) {
@@ -136,7 +71,7 @@ public class PushHandler {
                 message.setDeviceId(items[1]);
             }
         });
-        request.queryParam("msgid").ifPresent(message::setLogId);
+        request.queryParam(PARAMETER_MESSAGE_ID).ifPresent(message::setLogId);
 
         int method = figureOutMethod(request);
         // pushing needs ack
@@ -146,7 +81,7 @@ public class PushHandler {
         String sn = message.getSn();
         String key = pushService.pool(message);
         return new DirectiveProcessor(ttsService)
-                .processMultiparts(cuid, sn, request.body(BodyExtractors.toParts()), MessageType.PUSH_MESSAGE)
+                .processMultiparts(cuid, sn, request.body(BodyExtractors.toParts()), MessageType.PUSH_MESSAGE, false)
                 .flatMapSequential(directive -> {
                     DataPointMessage assembled = assembleDirective0(method, directive, IdGenerator.nextId(), key, message);
                     return pushService.push(assembled).then();
@@ -157,13 +92,10 @@ public class PushHandler {
                                 .check(message, key, idList)
                                 .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(message.getLogId(), "Waiting ack timeout")))
                                 .flatMap(baseResponse -> {
-                                    if (baseResponse.getCode() == 0) {
-                                        return ServerResponse.ok().body(BodyInserters.fromObject(baseResponse));
-                                    } else {
-                                        return ServerResponse.ok().body(
-                                                BodyInserters.fromObject(failedResponses.apply(message.getLogId(), "Pushing message failed"))
-                                        );
+                                    if (baseResponse.getCode() != 0) {
+                                        log.error("Checking acknowledges failed");
                                     }
+                                    return ServerResponse.ok().body(BodyInserters.fromObject(baseResponse));
                                 })
                                 .onErrorResume(
                                         e -> {
@@ -190,42 +122,6 @@ public class PushHandler {
             } catch (NumberFormatException ignore) {}
         }
         return method;
-    }
-
-    private List<DataPointMessage> assemble(int method,
-                                            List<Part> metadata,
-                                            List<Part> audios,
-                                            List<Integer> idList,
-                                            String key,
-                                            BaseMessage origin) {
-        List<JsonNode> metadataJson;
-        if (audios != null && audios.size() > 0) {
-            metadataJson = pushService.fixUrl(metadata, audios);
-        } else {
-            metadataJson = pushService.readJson(metadata);
-        }
-        return assembleDirective(method, metadataJson, idList, key, origin);
-    }
-
-    private List<DataPointMessage> assembleDirective(int method,
-                                                     List<JsonNode> directives,
-                                                     List<Integer> idList,
-                                                     String key,
-                                                     BaseMessage origin) {
-        if (directives == null || directives.size() < 1 || origin == null) {
-            return Collections.emptyList();
-        }
-
-        // try to append DialogueFinished
-        try2appendDialogueFinished(directives);
-
-        return directives.stream()
-                .map(jsonNode -> {
-                    int id = IdGenerator.nextId();
-                    idList.add(id);
-                    return assembleDirective0(method, jsonNode, id, key, origin);
-                })
-                .collect(Collectors.toList());
     }
 
     private DataPointMessage assembleDirective0(int method,

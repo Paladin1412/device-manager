@@ -43,6 +43,8 @@ public class CommonConstant {
     public static final String PARAMETER_CID = "cid:";
     public static final String PARAMETER_CONTENT_DISPOSITION = "content-disposition";
     public static final String PARAMETER_CONTENT_ID = "Content-ID";
+    public static final String PARAMETER_CLIENT_ID = "clt_id";
+    public static final String PARAMETER_MESSAGE_ID = "msgid";
 
     // splitters
     public static final String SPLITTER_DOLLAR = "$";
@@ -65,6 +67,4 @@ public class CommonConstant {
     public static final String MESSAGE_FAILURE = "failure";
     public static final int MESSAGE_FAILURE_CODE = -1;
     public static final int MESSAGE_UNEXPECTED_FAILURE_CODE = -2;
-
-    public static final String EXTENSION_MP3 = ".mp3";
 }

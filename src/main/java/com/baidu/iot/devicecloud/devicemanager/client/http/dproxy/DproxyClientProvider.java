@@ -4,14 +4,19 @@ import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.Response;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.retry.RetryException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 
 /**
  * DproxyClientProvider
@@ -37,82 +42,57 @@ public class DproxyClientProvider implements InitializingBean {
         instance = this;
     }
 
-    public DproxyResponse getConnection(DproxyRequest request) {
+    private DproxyResponse getConnection(DproxyRequest request) {
         return dproxyClient.sendCommand(request);
-    }
-
-    public Boolean setNX(String key, Object value) {
-        DproxyResponse response = null;
-        Boolean ok = false;
-        DproxyRequest request = new DproxyRequest("SETNX", prefix + key, value);
-        try {
-            response = getConnection(request);
-            if (null != response) {
-//                log.info("dproxy res={}", response.getRes());
-                //res 0 false 1 true
-                Object res = response.getRes();
-                ok = res instanceof Number && (Integer) res == 1;
-            }
-        } catch (Exception e) {
-            // pass
-            log.warn("dproxy setNX {} failed", key);
-        }
-        return ok;
     }
 
     public void set(String key, Object value) {
         setex(key, expireSeconds, value);
     }
 
-
-    public void rpush(String key, Object value) {
-        DproxyResponse response = null;
-        try {
-            DproxyRequest request = new DproxyRequest("RPUSH", prefix + key, value);
-            response = getConnection(request);
-        } catch (Exception e) {
-            log.warn("dproxy setex {} failed, {}", key, e);
-        }
-    }
-
     public void setex(String key, long seconds, Object value) {
         if (seconds == 0) {
             return;
         }
-        DproxyResponse response = null;
-        DproxyRequest request = null;
+        DproxyRequest request;
         if (seconds < 0) {
             request = new DproxyRequest("SET", prefix + key, value);
         } else {
             request = new DproxyRequest("SETEX", prefix + key, seconds, value);
         }
         try {
-            response = getConnection(request);
-
-//            if (null != response) {
-//                log.info("dproxy res={}", response.getRes());
-//            }
+            getConnection(request);
         } catch (Exception e) {
             // pass
             log.warn("dproxy setex {} failed, {}", key, e);
         }
     }
 
-    public void setexAsync(String key, long seconds, Object value) {
+    @Retryable(value = {RetryException.class}, backoff = @Backoff(200))
+    public CompletableFuture<Response> setexAsync(String key, long seconds, Object value) {
         if (seconds == 0) {
-            return;
+            return null;
         }
-        DproxyRequest request = null;
+        DproxyRequest request;
         if (seconds < 0) {
             request = new DproxyRequest("SET", prefix + key, value);
         } else {
             request = new DproxyRequest("SETEX", prefix + key, seconds, value);
         }
         try {
-            dproxyClient.sendCommandAsync(request);
+            return dproxyClient.sendCommandAsync(request).handleAsync(
+                    (r, t) -> {
+                        if (!r.isSuccessful()) {
+                            close(r);
+                            throw new RetryException("Retry");
+                        }
+                        return r;
+                    }
+            );
         } catch (Exception e) {
             // pass
             log.warn("dproxy setex {} failed, {}", key, e);
+            return null;
         }
     }
 
@@ -120,7 +100,7 @@ public class DproxyClientProvider implements InitializingBean {
         if (key == null || "".equals(key)) {
             return null;
         }
-        DproxyResponse response = null;
+        DproxyResponse response;
         DproxyRequest request = new DproxyRequest("GET", prefix + key);
         try {
             response = getConnection(request);
@@ -143,24 +123,30 @@ public class DproxyClientProvider implements InitializingBean {
     }
 
     public void del(String key) {
-        DproxyResponse response = null;
         DproxyRequest request = new DproxyRequest("DEL", prefix + key);
         try {
-            response = getConnection(request);
+            dproxyClient.sendCommandAsync(request).handleAsync(
+                    (r, t) -> {
+                        if (r.isSuccessful()) {
+                            log.debug("Deleting {} from redis succeeded", key);
+                        }
+                        close(r);
+                        return null;
+                    }
+            );
         } catch (Exception e) {
-            // pass
-            log.warn("dproxy del {} failed", key);
+            log.error("Deleting {} from redis failed", key, e);
         }
     }
 
-    public boolean expire(String key, long expire) {
+    private boolean expire(String key, long expire) {
         boolean ok = false;
-        if (key == null || "".equals(key)) {
-            return ok;
+        if (StringUtils.isEmpty(key)) {
+            return false;
         }
 
         if (exists(key)) {
-            DproxyResponse response = null;
+            DproxyResponse response;
             DproxyRequest request = new DproxyRequest("EXPIRE", prefix + key, expire);
             try {
                 response = getConnection(request);
@@ -179,8 +165,8 @@ public class DproxyClientProvider implements InitializingBean {
     }
 
     public boolean exists(String key) {
-        DproxyResponse response = null;
-        Boolean ok = false;
+        DproxyResponse response;
+        boolean ok = false;
         DproxyRequest request = new DproxyRequest("EXISTS", prefix + key);
         try {
             response = getConnection(request);
@@ -196,45 +182,8 @@ public class DproxyClientProvider implements InitializingBean {
         return ok;
     }
 
-    public Long ttl(String key) {
-        Long result = -3L;
-        if (key == null || "".equals(key)) {
-            return result;
-        }
-
-        DproxyResponse response = null;
-        DproxyRequest request = new DproxyRequest("TTL", prefix + key);
-        try {
-            response = getConnection(request);
-            if (null != response) {
-                log.info("dproxy ttl res={}", response.getRes());
-                result = Long.parseLong(response.getRes().toString());
-            }
-        } catch (Exception e) {
-            // pass
-            log.warn("dproxy ttl failed", key);
-        }
-
-        return result;
-    }
-
-
     public String get(String key) {
         return get(key, String.class);
-    }
-
-
-    public boolean setNX(String key, String value, long expireSeconds) {
-        if (key == null || "".equals(key) || value == null || "".equals(value)) {
-            return false;
-        }
-
-        boolean result = setNX(key, value);
-        if (result) {
-            result = expire(key, expireSeconds);
-        }
-
-        return result;
     }
 
     public boolean hset(String key, long seconds, String hKey, Object value) {
@@ -251,24 +200,6 @@ public class DproxyClientProvider implements InitializingBean {
         } catch (Exception e) {
             // pass
             log.warn("redis hset {} failed", key);
-        }
-        return false;
-    }
-
-    public boolean hmset(String key, long seconds, Object... values) {
-        if (seconds == 0) {
-            return false;
-        }
-        try {
-            DproxyRequest request = new DproxyRequest("HMSET", prefix + key, values);
-            DproxyResponse response = getConnection(request);
-            if (response != null && response.getStatus() == 0) {
-                log.debug("hmset successfully res={}", response.getRes());
-                return expire(key, seconds);
-            }
-        } catch (Exception e) {
-            // pass
-            log.warn("redis hmset {} failed", key);
         }
         return false;
     }
@@ -293,53 +224,4 @@ public class DproxyClientProvider implements InitializingBean {
         }
         return null;
     }
-
-    public boolean hdel(String key, String hKey) {
-        if (StringUtils.isEmpty(key) || StringUtils.isEmpty(hKey)) {
-            return false;
-        }
-        try {
-            DproxyRequest request = new DproxyRequest("HDEL", prefix + key, hKey);
-            DproxyResponse response = getConnection(request);
-            if (response != null && response.getStatus() == 0) {
-                return true;
-            }
-        } catch (Exception e) {
-            // pass
-            log.warn("redis hdel {} : {} failed", key, hKey);
-        }
-        return false;
-    }
-
-    public <T> List<T> hmget(String key, Class<T> type, String... hKeys) {
-        if (StringUtils.isEmpty(key) || hKeys.length == 0) {
-            return null;
-        }
-        try {
-            DproxyRequest request = new DproxyRequest("HMGET", prefix + key, hKeys);
-            DproxyResponse response = getConnection(request);
-            if (response != null && response.getStatus() == 0 && !response.getRes().equals("null")) {
-                log.debug("hmget successfully res={}", response.getRes());
-                if (type == String.class) {
-                    return (List<T>)response.getRes();
-                } else {
-                    List<T> result = new ArrayList<>();
-                    List res = (List)response.getRes();
-                    for (Object r : res) {
-                        if (null == r) {
-                            result.add(null);
-                        } else {
-                            result.add(jsonUtil.deserialize(String.valueOf(r), type));
-                        }
-                    }
-                    return result;
-                }
-            }
-        } catch (Exception e) {
-            // pass
-            log.warn("redis hmget {} failed", key);
-        }
-        return null;
-    }
-
 }
