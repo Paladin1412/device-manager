@@ -1,5 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.util;
 
+import com.google.common.base.Charsets;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
@@ -46,8 +47,10 @@ public class LogUtils {
             byte[] bytes = ByteStreams.toByteArray(dataBuffer);
             NettyDataBufferFactory nettyDataBufferFactory = new NettyDataBufferFactory(new UnpooledByteBufAllocator(false));
             if (log.isDebugEnabled()) {
+//                log.debug("\n" +
+//                        "{}Payload    : \n{}", inOrOut, ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(bytes)));
                 log.debug("\n" +
-                        "{}Payload    : \n{}", inOrOut, ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(bytes)));
+                        "{}Payload    : \n{}", inOrOut, new String(bytes, Charsets.UTF_8));
             }
             DataBufferUtils.release(buffer);
             return (T) nettyDataBufferFactory.wrap(bytes);
