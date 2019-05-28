@@ -1,27 +1,25 @@
 server.port=$EM_PORT
 local.network.interface=xgbe0
 dm.tcp.port=$tcp
-#di.api=http://api-iot.baidu-int.com/for-di
-#di.api=http://127.0.0.1:8998
 di.bns=unknown_bns_di
-di.api=10.117.139.21:8301
+di.api=
+di.url=http://api-iot.baidu-int.com/for-di
+#di.url=http://127.0.0.1:8998
 
-# dproxy sandbox
-dproxy.bns=baidu-duer-bdrp-proxy-sandbox.nlp.nj03
-dproxy.api=10.194.62.45:8123
+# dproxy online
+dproxy.bns=group.smartbns-from_product=dumi-bdrp-proxy@group.flow-bdrpproxy.dumi.all:main
+dproxy.api=
 
-# dcs proxy
-dcs.proxy.bns=dumi-connect-controller-sandbox-prev-5035.orp.all
-dcs.proxy.api=10.173.51.160:8260
+# dcs proxy online
+dcs.proxy.bns=group.flow-dcs-controller.dumi.all
+dcs.proxy.api=
 dcs.proxy.address.state=
 dcs.proxy.address.asr=
 dcs.proxy.address.evt=
 
 tts.proxy.bns=unknown_bns_ttsProxy
-tts.proxy.api=10.117.80.48:8997
+tts.proxy.api=
 #tts.proxy.api=127.0.0.1:8099
-tts.proxy.domain=http://res.iot.baidu.com
-tts.proxy.path=cached/tts/v1/
 
 dh.bns=unknown_bns_dh
 dh.api=10.115.54.25:8207

@@ -21,7 +21,7 @@ import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isLegalType;
 @Slf4j
 public class TlvDecoder extends ByteToMessageDecoder {
     @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         while (true) {
             if (notEnoughData(in)) {
                 return;

@@ -2,6 +2,7 @@ package com.baidu.iot.devicecloud.devicemanager.client.http;
 
 import okhttp3.ConnectionPool;
 import okhttp3.OkHttpClient;
+import okhttp3.logging.HttpLoggingInterceptor;
 
 import java.util.concurrent.TimeUnit;
 
@@ -15,7 +16,10 @@ public class OkHttpH1ClientPool {
 
     static {
         OkHttpClient.Builder builder = new OkHttpClient.Builder();
+        HttpLoggingInterceptor logging = new HttpLoggingInterceptor();
+        logging.setLevel(HttpLoggingInterceptor.Level.BASIC);
         ourInstance = builder
+                .addInterceptor(logging)
                 .retryOnConnectionFailure(true)
                 .readTimeout(4000, TimeUnit.MILLISECONDS)
                 .writeTimeout(4000, TimeUnit.MILLISECONDS)

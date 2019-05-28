@@ -37,7 +37,7 @@ public class HearBeatService extends AbstractLinkableHandlerAdapter<BaseMessage>
                         .doOnNext(next -> {
                             log.info("[Heartbeat] cuid:{} ip:{} port:{}",
                                     message.getDeviceId(), message.getDeviceIp(), message.getDevicePort());
-                            this.accessTokenService.refreshAccessToken(message);
+                            this.accessTokenService.getAccessToken(message.getDeviceId(), message.getLogId());
                         })
                         .flatMap(msg -> Mono.just(successResponsesWithMessage.apply(msg)))
                         .switchIfEmpty(Mono.defer(() ->Mono.error(new ServerWebInputException("No heartbeat"))))

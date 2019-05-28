@@ -14,7 +14,9 @@ import org.springframework.util.StringUtils;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/6.
@@ -67,6 +69,22 @@ public class TlvUtil {
         return false;
     }
 
+    private static BiFunction<TlvMessage, Integer, Boolean> checkType =
+            (tlv, type) -> {
+                try {
+                    return tlv.getType() == type;
+                } catch (Exception e) {
+                    log.error("Checking the tlv message's type failed", e);
+                    return false;
+                }
+            };
+
+    public static Predicate<TlvMessage> isAsrTlv = tlv -> checkType.apply(tlv, TlvConstant.TYPE_DOWNSTREAM_ASR);
+    public static Predicate<TlvMessage> isDirectiveTlv = tlv -> checkType.apply(tlv, TlvConstant.TYPE_DOWNSTREAM_DUMI);
+    public static Predicate<TlvMessage> isTTSTlv = tlv -> checkType.apply(tlv, TlvConstant.TYPE_DOWNSTREAM_TTS);
+    public static Predicate<TlvMessage> isPreTTSTlv = tlv -> checkType.apply(tlv, TlvConstant.TYPE_DOWNSTREAM_PRE_TTS);
+    public static Predicate<TlvMessage> isDownStreamFinishTlv = tlv -> checkType.apply(tlv, TlvConstant.TYPE_DOWNSTREAM_FINISH);
+
     public static boolean isUpstreamInitPackage(TlvMessage msg) {
         return checkType(msg, TlvConstant.TYPE_UPSTREAM_INIT);
     }
@@ -81,6 +99,10 @@ public class TlvUtil {
 
     public static boolean isDownstreamFinishPackage(TlvMessage msg) {
         return checkType(msg, TlvConstant.TYPE_DOWNSTREAM_FINISH);
+    }
+
+    public static boolean isAsrPackage(TlvMessage msg) {
+        return isAsrTlv.test(msg);
     }
 
     private static boolean checkType(TlvMessage msg, int type) {

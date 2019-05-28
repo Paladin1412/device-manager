@@ -8,7 +8,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
 import java.util.UUID;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_CID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.COMMAND_SPEAK;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DIRECTIVE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_DIALOG_ID;
@@ -16,6 +22,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_NAME;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_NAMESPACE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_PAYLOAD;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_PAYLOAD_URL;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.PRIVATE_PROTOCOL_NAMESPACE;
 
 /**
@@ -56,6 +63,73 @@ public class DirectiveUtil {
         extraData.set("index", IntNode.valueOf(index));
         //
         data.set(DIRECTIVE_KEY_DIRECTIVE, directive);
+        data.set("iot_cloud_extra", extraData);
+        return data;
+    }
+
+    public static Predicate<JsonNode> isSpeak =
+            node ->
+                    COMMAND_SPEAK.equalsIgnoreCase(node
+                            .path(DIRECTIVE_KEY_DIRECTIVE)
+                            .path(DIRECTIVE_KEY_HEADER)
+                            .path(DIRECTIVE_KEY_HEADER_NAME).asText());
+
+    public static Predicate<JsonNode> needRewrite =
+            node -> StringUtils.startsWithIgnoreCase(
+                    node
+                            .path(DIRECTIVE_KEY_DIRECTIVE)
+                            .path(DIRECTIVE_KEY_PAYLOAD)
+                            .path(DIRECTIVE_KEY_PAYLOAD_URL).asText(),
+                    PARAMETER_CID
+            );
+
+    public static Function<JsonNode, String> getContentId =
+            node -> {
+                String url = node
+                        .path(DIRECTIVE_KEY_DIRECTIVE)
+                        .path(DIRECTIVE_KEY_PAYLOAD)
+                        .path(DIRECTIVE_KEY_PAYLOAD_URL)
+                        .asText();
+                if (StringUtils.hasText(url)) {
+                    String[] items = StringUtils.split(url, SPLITTER_COLON);
+                    if (items!= null && items.length > 1) {
+                        return items[1];
+                    }
+                }
+                return null;
+            };
+
+    public static Function<JsonNode, String> getMessageId =
+            node -> node
+                    .path(DIRECTIVE_KEY_DIRECTIVE)
+                    .path(DIRECTIVE_KEY_HEADER)
+                    .path(DIRECTIVE_KEY_HEADER_MESSAGE_ID)
+                    .asText();
+
+    public static Function<JsonNode, String> getDialogueRequestId =
+            node -> node
+                    .path(DIRECTIVE_KEY_DIRECTIVE)
+                    .path(DIRECTIVE_KEY_HEADER)
+                    .path(DIRECTIVE_KEY_HEADER_DIALOG_ID)
+                    .asText();
+
+    public static BiConsumer<JsonNode, String> rewrite =
+            (node, url) -> {
+                if (StringUtils.isEmpty(url)) {
+                    return;
+                }
+                JsonNode payloadNode = node.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_PAYLOAD);
+                if (payloadNode != null && payloadNode.isObject()) {
+                    ObjectNode payload = (ObjectNode) payloadNode;
+                    payload.set(DIRECTIVE_KEY_PAYLOAD_URL, TextNode.valueOf(url));
+                }
+            };
+
+    public static JsonNode addExtraInfo(JsonNode directive, int index) {
+        ObjectNode data = (ObjectNode) directive;
+        ObjectNode extraData = JsonUtil.createObjectNode();
+        extraData.set("timestamp", TextNode.valueOf(Long.toString(System.currentTimeMillis())));
+        extraData.set("index", IntNode.valueOf(index));
         data.set("iot_cloud_extra", extraData);
         return data;
     }

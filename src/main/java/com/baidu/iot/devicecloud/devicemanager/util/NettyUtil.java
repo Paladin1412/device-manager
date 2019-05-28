@@ -2,15 +2,12 @@ package com.baidu.iot.devicecloud.devicemanager.util;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.constant.ConfirmationStates;
-import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFutureListener;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteOrder;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
@@ -27,8 +24,9 @@ public class NettyUtil {
      * Closes the specified channel after all queued write requests are flushed.
      */
     public static void closeOnFlush(Channel ch) {
-        if (ch.isActive()) {
-            ch.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
+        log.debug("Closing the channel: {}", ch);
+        if (ch != null && ch.isOpen()) {
+            ch.flush().close();
         }
     }
 
@@ -39,10 +37,9 @@ public class NettyUtil {
                     .addListeners((ChannelFutureListener) future -> {
                         if (!future.isSuccess()) {
                             log.error("Writing and flushing message {} to channel {} has failed",
-                                    String.valueOf(msg),
-                                    String.valueOf(channel),
+                                    msg,
+                                    channel,
                                     future.cause());
-                            future.cause().printStackTrace();
                         }
 
                         String msgLog;
@@ -51,7 +48,7 @@ public class NettyUtil {
                         } else {
                             msgLog = String.valueOf(msg);
                         }
-                        log.debug("Writing and flushing message \n{}\nto {} successfully.", msgLog, String.valueOf(channel));
+                        log.debug("Writing and flushing message \n{}\nto {} successfully.", msgLog, channel);
                     }, ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
         } else {
             log.warn("Connection {} has been reset by peer", channel);
@@ -74,13 +71,8 @@ public class NettyUtil {
                     && ConfirmationStates.CONFIRMED == channel.attr(CONFIRMATION_STATE).get()) {
                 writeAndFlush(channel, t);
             } else {
-                log.debug("{} has not been confirmed, the message {} being discarded.", channel.toString(), String.valueOf(t));
+                log.debug("{} has not been confirmed, the message {} being discarded.", channel.toString(), t);
             }
         };
     }
-
-    public static Predicate<TlvMessage> isDirectiveTlv = (TlvMessage tlv) -> tlv.getType() == TlvConstant.TYPE_DOWNSTREAM_DUMI;
-    public static Predicate<TlvMessage> isTTSTlv = (TlvMessage tlv) -> tlv.getType() == TlvConstant.TYPE_DOWNSTREAM_TTS;
-    public static Predicate<TlvMessage> isPreTTSTlv = (TlvMessage tlv) -> tlv.getType() == TlvConstant.TYPE_DOWNSTREAM_PRE_TTS;
-    public static Predicate<TlvMessage> isDownStreamFinishTlv = (TlvMessage tlv) -> tlv.getType() == TlvConstant.TYPE_DOWNSTREAM_FINISH;
 }

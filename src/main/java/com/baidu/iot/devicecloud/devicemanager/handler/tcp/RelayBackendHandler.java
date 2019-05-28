@@ -1,28 +1,26 @@
 package com.baidu.iot.devicecloud.devicemanager.handler.tcp;
 
-import com.baidu.iot.devicecloud.devicemanager.adapter.Adapter;
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.constant.ConfirmationStates;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
+import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.NettyUtil;
+import com.baidu.iot.devicecloud.devicemanager.util.TlvUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
-
-import java.util.stream.Stream;
 
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CUID;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.SN;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.closeOnFlush;
-import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.isDownStreamFinishTlv;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlush;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.confirmedConnection;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isDownstreamFinishPackage;
@@ -38,7 +36,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     private final Channel downstreamChannel;
     private final UnicastProcessor<TlvMessage> downstreamWorkQueue;
     private final UnicastProcessor<TlvMessage> workQueue;
-    private final DirectiveProcessor directiveProcessor;
+    private final DirectiveProcessor processor;
 
     private String cuid = null;
     private String sn = null;
@@ -51,42 +49,59 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
 
     RelayBackendHandler(Channel downstreamChannel,
                         UnicastProcessor<TlvMessage> downstreamWorkQueue,
-                        DirectiveProcessor directiveProcessor) {
+                        TtsService ttsService) {
         // auto release the received data
         super();
 
         this.downstreamChannel = downstreamChannel;
         this.downstreamWorkQueue = downstreamWorkQueue;
-        this.directiveProcessor = directiveProcessor;
+        this.processor = new DirectiveProcessor(ttsService);
         this.workQueue =
                 UnicastProcessor.create(Queues.<TlvMessage>xs().get());
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) throws Exception {
+    protected void channelRead0(ChannelHandlerContext ctx, TlvMessage msg) {
         Channel upstreamChannel = ctx.channel();
         log.debug("The asr-link relay server inner channel {} has read a message:\n{}",
-                upstreamChannel.toString(), String.valueOf(msg));
+                upstreamChannel, msg);
         if (isDownstreamInitPackage(msg)) {
             initialPackageHasArrived = true;
             if (confirmedConnection(msg)) {
                 upstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMED);
                 log.debug("{} has been confirmed by dcs. Subscribing to dcs", upstreamChannel.toString());
-                downstreamWorkQueue.subscribe(NettyUtil.good2Go(upstreamChannel).<TlvMessage>get());
+                downstreamWorkQueue.subscribe(NettyUtil.good2Go(upstreamChannel).get());
 
                 downstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMED);
                 log.debug("{} has been confirmed by dm. Subscribing to asr", upstreamChannel.toString());
-                workQueue.collectList()
-                        .flatMapMany(list -> Flux.fromStream(
-                                Stream.concat(
-                                        Adapter.directive2DataPointTLV(
-                                                directiveProcessor.process(this.cuid, this.sn, list),
-                                                TlvConstant.TYPE_DOWNSTREAM_DUMI
-                                        ).stream(),
-                                        list.stream().filter(isDownStreamFinishTlv)
-                                )
-                        ))
-                        .subscribe(NettyUtil.good2Go(downstreamChannel).<TlvMessage>get());
+
+                workQueue
+                        .groupBy(TlvUtil::isDownstreamFinishPackage)
+                        .flatMapSequential(group -> {
+                            if (Boolean.valueOf(String.valueOf(group.key()))) {
+                                return group.flatMap(Mono::just);
+                            } else {
+                                // input 0xF002, 0xF003, 0xF004 or 0xF006
+                                // output TlvMessage
+                                return group
+                                        .groupBy(TlvUtil::isAsrPackage)
+                                        .flatMapSequential(subGroup -> {
+                                            if (Boolean.valueOf(String.valueOf(subGroup.key()))) {
+                                                return subGroup.flatMap(Mono::just);
+                                            } else {
+                                                // input 0xF003, 0xF004 or 0xF006
+                                                // output TlvMessage
+                                                return processor.processAsr(this.cuid, this.sn, subGroup);
+                                            }
+                                        });
+                            }
+                        })
+                        .elapsed()
+                        .flatMap(t -> {
+                            log.debug("Elapsed time: {}ms", t.getT1());
+                            return Mono.just(t.getT2());
+                        })
+                        .subscribe(NettyUtil.good2Go(downstreamChannel).get());
 
                 this.cuid = upstreamChannel.attr(CUID).get();
                 this.sn = upstreamChannel.attr(SN).get();
@@ -128,7 +143,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         log.debug("The dcs has logged out.");
-        workQueue.clear();
+        clearWorkQueue();
         super.channelInactive(ctx);
     }
 
@@ -137,7 +152,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
         Channel channel = ctx.channel();
         log.error("Caught an exception on the asr-link dcs channel({})", channel);
         log.error("The stack traces listed below", cause);
-        workQueue.clear();
+        clearWorkQueue();
         closeOnFlush(channel);
     }
 
@@ -151,5 +166,12 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
             }
         }
         super.userEventTriggered(ctx, evt);
+    }
+
+    private void clearWorkQueue() {
+        if (workQueue != null && !workQueue.isDisposed()) {
+            workQueue.onComplete();
+            workQueue.clear();
+        }
     }
 }

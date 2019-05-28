@@ -33,6 +33,7 @@ public class SecurityService {
         String key = StringUtils.arrayToDelimitedString(
                 new String[]{
                         uniqueId,
+                        cuid,
                         localServerInfo.getLocalServerIp(),
                         Integer.toString(LocalServerInfo.localServerPort),
                         Long.toString(System.currentTimeMillis(), 16)

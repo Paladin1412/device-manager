@@ -1,12 +1,9 @@
 package com.baidu.iot.devicecloud.devicemanager.service.handler;
 
-import com.baidu.iot.devicecloud.devicemanager.adapter.Adapter;
-import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
-import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenResponse;
 import com.baidu.iot.devicecloud.devicemanager.codec.TlvDecoder;
 import com.baidu.iot.devicecloud.devicemanager.codec.TlvEncoder;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
@@ -17,7 +14,7 @@ import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
 import com.baidu.iot.devicecloud.devicemanager.service.AccessTokenService;
 import com.baidu.iot.devicecloud.devicemanager.service.PushService;
-import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
+import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.BinaryNode;
@@ -26,23 +23,20 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.RemovalListener;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.pool.AbstractChannelPoolMap;
-import io.netty.channel.pool.ChannelPoolHandler;
-import io.netty.channel.pool.ChannelPoolMap;
-import io.netty.channel.pool.SimpleChannelPool;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.FutureListener;
+import io.netty.handler.timeout.IdleStateHandler;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
@@ -53,7 +47,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.UnicastProcessor;
@@ -63,8 +56,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.time.Duration;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -74,9 +65,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_UNSUPPORTED_CONTENT_FORMAT;
@@ -95,7 +84,6 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_P
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_STANDBY_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_USER_AGENT;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlush;
 
 /**
@@ -106,15 +94,12 @@ import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlu
 @Slf4j
 @Component
 public class DuerEventHandler extends AbstractLinkableDataPointHandler {
-    private static final String KEY_PATTERN = "%s_%s_%s";
     private static final String RELAY_BACK_HANDLER = "relayBackendHandler";
     private static final byte[] CRLF = {'\r', '\n'};
     private final AccessTokenService accessTokenService;
     private final PushService pushService;
-    private final DirectiveProcessor directiveProcessor;
+    private final TtsService ttsService;
 
-    public Cache<String, Optional<String>> cache;
-    private ChannelPoolMap<InetSocketAddress, SimpleChannelPool> poolMap;
     private ExecutorService commonSideExecutor;
 
     @Value("${dcs.proxy.address.evt:}")
@@ -123,62 +108,10 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
     @Autowired
     public DuerEventHandler(AccessTokenService accessTokenService,
                             PushService pushService,
-                            DirectiveProcessor directiveProcessor) {
+                            TtsService ttsService) {
         this.accessTokenService = accessTokenService;
         this.pushService = pushService;
-        this.directiveProcessor = directiveProcessor;
-
-        cache = CacheBuilder.newBuilder()
-                .concurrencyLevel(100)
-                .maximumSize(1_000_000)
-                .expireAfterWrite(Duration.ofMinutes(3))
-                .recordStats()
-                .removalListener(
-                        (RemovalListener<String, Optional<String>>) n ->
-                                log.debug("Removed Access Token: ({}, {}), caused by: {}",
-                                        n.getKey(), n.getValue().orElse("null"), n.getCause().toString())
-                )
-                .build();
-
-        poolMap = new AbstractChannelPoolMap<InetSocketAddress, SimpleChannelPool>() {
-            @Override
-            protected SimpleChannelPool newPool(InetSocketAddress key) {
-                log.debug("Creating new pool for {}", key.toString());
-                return new SimpleChannelPool(
-                        new Bootstrap()
-                                .group(new NioEventLoopGroup())
-                                .channel(NioSocketChannel.class)
-                                .remoteAddress(key),
-                        new ChannelPoolHandler() {
-                            @Override
-                            public void channelReleased(Channel ch) throws Exception {
-                                log.debug("{} has been released", ch.toString());
-                            }
-
-                            @Override
-                            public void channelAcquired(Channel ch) throws Exception {
-                                log.debug("{} has been acquired", ch.toString());
-                            }
-
-                            @Override
-                            public void channelCreated(Channel ch) throws Exception {
-                                log.debug("{} has been created", ch.toString());
-                                ChannelPipeline pipeline = ch.pipeline();
-                                pipeline
-                                        // Inbounds start from below
-                                        .addLast("tlvDecoder", new TlvDecoder())
-                                        // Inbounds stop at above
-
-                                        // Outbounds stop at below
-                                        .addLast("disconnectedHandler", new DisconnectedHandler())
-                                        .addLast("tlvEncoder", new TlvEncoder("dcsProxyClient"))
-                                        // Outbounds start from above
-                                ;
-                            }
-                        }
-                );
-            }
-        };
+        this.ttsService = ttsService;
 
         commonSideExecutor = new ThreadPoolExecutor(0, 50,
                 60L, TimeUnit.SECONDS,
@@ -196,40 +129,30 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             return Mono.just(emptyResponses.apply(message));
         }
 
-        String cuid = message.getDeviceId();
-        String pid = message.getProductId();
-        String sn = message.getSn();
-        String key = String.format(KEY_PATTERN, cuid, pid, sn);
-        Optional<String> optAccessToken;
-        try {
-            optAccessToken = cache.get(key, () -> loadAccessToken(message));
-        } catch (Exception e) {
-            return Mono.error(e);
-        }
-        if (!optAccessToken.isPresent()) {
-            cache.invalidate(key);
+        String accessToken = accessTokenService.getAccessToken(message.getDeviceId(), message.getLogId());
+        if (StringUtils.isEmpty(accessToken)) {
             return Mono.just(unauthorizedResponses.apply(message));
         }
 
-        CompletableFuture<Mono<BaseResponse>> future =
-                CompletableFuture.supplyAsync(() -> doWork(message, optAccessToken.get()), commonSideExecutor);
+        CompletableFuture<Flux<BaseResponse>> future =
+                CompletableFuture.supplyAsync(() -> doWork(message, accessToken), commonSideExecutor);
         future.handleAsync(
                 (r, t) -> r
-                        .timeout(
+                        /*.timeout(
                                 Duration.ofSeconds(5),
                                 Mono.just(failedResponses.apply(message.getLogId(), "Processing timeout"))
-                        )
+                        )*/
                         .subscribe(baseResponse -> {
                             log.debug("{} executing result:{} messageId:{}",
                                     DATA_POINT_DUER_EVENT, baseResponse, message.getId());
-                        })
+                        },
+                                throwable -> log.error("Dealing with the duer event failed", throwable))
         );
-        return Mono.just(successDataPointResponses.get());
+        return Mono.just(successDataPointResponses.apply(message.getId()));
     }
 
-    private Mono<BaseResponse> doWork(DataPointMessage message, String accessToken) {
+    private Flux<BaseResponse> doWork(DataPointMessage message, String accessToken) {
         // Initializing a new connection to DCS proxy for each client connected to the relay server til the client has report the first initial package
-        log.debug("The relay server is connecting to dcs.");
         InetSocketAddress assigned;
         if (StringUtils.hasText(dcsProxyEvtAddress)) {
             String[] items = dcsProxyEvtAddress.split(Pattern.quote(SPLITTER_COLON));
@@ -242,55 +165,68 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             assigned = BnsCache.getHashedDcsTcpAddress(message, false);
         }
         if (assigned == null) {
-            return Mono.error(new IllegalStateException("Couldn't find any dcs address"));
+            return Flux.error(new IllegalStateException("Couldn't find any dcs address"));
         }
         // all tlv messages those should be sent to dcs
         final UnicastProcessor<TlvMessage> requestQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
         // all tlv messages those received from dcs
         final UnicastProcessor<TlvMessage> responseQueue = UnicastProcessor.create(Queues.<TlvMessage>xs().get());
-        final SimpleChannelPool pool = poolMap.get(assigned);
-        Future<Channel> f = pool.acquire();
-        f.addListener((FutureListener<Channel>) channelFuture -> {
-            if (channelFuture.isSuccess()) {
-                final Channel channel = channelFuture.getNow();
-                ChannelPipeline pipelines = channel.pipeline();
-                if (pipelines.get(RELAY_BACK_HANDLER) != null) {
-                    pipelines.remove(RELAY_BACK_HANDLER);
+
+        EventLoopGroup workerGroup = new NioEventLoopGroup(1);
+
+        try {
+            Bootstrap b = new Bootstrap();
+            b.group(workerGroup)
+            .channel(NioSocketChannel.class)
+            .option(ChannelOption.SO_KEEPALIVE, true)
+            .handler(new ChannelInitializer<SocketChannel>() {
+                @Override
+                public void initChannel(SocketChannel ch) {
+                    ChannelPipeline pipeline = ch.pipeline();
+                    pipeline
+                            // Inbounds start from below
+                            .addLast("tlvDecoder", new TlvDecoder())
+                            .addLast("idleStateHandler", new IdleStateHandler(25, 5, 0))
+                            .addLast(RELAY_BACK_HANDLER, new RelayBackendHandler(requestQueue, responseQueue))
+                            // Inbounds stop at above
+
+                            // Outbounds stop at below
+                            .addLast("disconnectedHandler", new DisconnectedHandler())
+                            .addLast("tlvEncoder", new TlvEncoder("dcsProxyClient"));
+                    // Outbounds start from above
                 }
-                pipelines.addLast(RELAY_BACK_HANDLER, new RelayBackendHandler(requestQueue, responseQueue));
-                writeAndFlush(channel, initPackage.apply(message, accessToken));
-                channel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
+            });
 
-                TlvMessage data = dataPackage.apply(message);
-                if (data != null) {
-                    requestQueue.onNext(data);
-                }
-                requestQueue.onNext(finishPackage.apply(message));
-                requestQueue.onComplete();
-                pool.release(channel);
-            }
-        });
+            // Start the client.
+            final ChannelFuture cf = b.connect(assigned);
+            cf.addListener(future -> {
+                if (future.isSuccess()) {
+                    Channel channel = cf.channel();
+                    writeAndFlush(channel, initPackage.apply(message, accessToken));
+                    channel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
 
-        return Flux.push(fluxSink -> responseQueue.subscribe(
-                    new BaseSubscriber<TlvMessage>() {
-                        @Override
-                        protected void hookOnNext(TlvMessage value) {
-                            fluxSink.next(value);
-                        }
-
-                        @Override
-                        protected void hookOnComplete() {
-                            fluxSink.complete();
-                        }
+                    TlvMessage data = dataPackage.apply(message);
+                    if (data != null) {
+                        requestQueue.onNext(data);
                     }
-                ))
-                .collectList()
-                .flatMap(list -> pushService.push(deal(list, message)))
-                .doFinally(signalType -> {
-                    log.debug("Finally, refreshing the access token, signalType={}", signalType);
-                    accessTokenService.refreshAccessToken(message);
-                })
-                .switchIfEmpty(Mono.defer(() ->Mono.just(failedResponses.apply(message.getLogId(), "Nothing to respond"))));
+                    requestQueue.onNext(finishPackage.apply(message));
+                } else {
+                    responseQueue.onComplete();
+                }
+                requestQueue.onComplete();
+            });
+            // should block here
+            // noinspection BlockingMethodInNonBlockingContext
+            cf.channel().closeFuture().sync();
+        } catch (InterruptedException e) {
+            log.error("Closing the proxy tcp client failed", e);
+            requestQueue.onComplete();
+            responseQueue.onComplete();
+        } finally {
+            workerGroup.shutdownGracefully();
+        }
+
+        return deal(responseQueue, message);
     }
 
     private final BiFunction<DataPointMessage, String, TlvMessage> initPackage =
@@ -352,7 +288,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             multipartBody.writeTo(buffer);
             long vlen = buffer.size();
             byte[] content = buffer.readByteArray();
-            log.debug("multipartBody:\n{}", new String(content, Charsets.UTF_8));
+//            log.debug("multipartBody:\n{}", new String(content, Charsets.UTF_8));
             return new TlvMessage(TlvConstant.TYPE_UPSTREAM_DUMI, vlen, content);
         } catch (IOException e) {
             log.error("Assembling the data package failed", e);
@@ -382,11 +318,11 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         }
     }
 
-    private final Supplier<DataPointMessage> successDataPointResponses = () -> {
+    private final Function<Integer, DataPointMessage> successDataPointResponses = id -> {
         DataPointMessage response = new DataPointMessage();
         response.setVersion(DEFAULT_VERSION);
         response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID);
-        response.setId(IdGenerator.nextId());
+        response.setId(id);
         return response;
     };
 
@@ -410,29 +346,10 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
         return response;
     };
 
-    private Optional<String> loadAccessToken(BaseMessage message) throws Exception {
-        AccessTokenResponse response = accessTokenService.try2ObtainAccessToken(message);
-        if (response != null && StringUtils.hasText(response.getAccessToken())) {
-            return Optional.of(response.getAccessToken());
-        }
-        log.error("This device({})'s login session has been expired.", message.getDeviceId());
-        return Optional.empty();
-    }
-
-    private List<DataPointMessage> deal(List<Object> list, DataPointMessage origin) {
-        List<TlvMessage> tlvs = list
-                .stream()
-                .filter(o -> o instanceof TlvMessage)
-                .map(TlvMessage.class::cast)
-                .collect(Collectors.toList());
-
-        return Adapter.directive2DataPoint(
-                directiveProcessor.process(
-                        origin.getDeviceId(),
-                        origin.getSn(),
-                        tlvs
-                ),
-                origin
-        );
+    private Flux<BaseResponse> deal(Flux<TlvMessage> messageFlux, DataPointMessage origin) {
+        String cuid = origin.getDeviceId();
+        String sn = origin.getSn();
+        return new DirectiveProcessor(ttsService).processEvent(cuid, sn, messageFlux, origin)
+                .flatMapSequential(pushService::push);
     }
 }

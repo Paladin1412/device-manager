@@ -7,9 +7,6 @@ import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
 import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.AbstractHttpClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenRequest;
-import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenResponse;
-import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
-import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.google.common.base.Preconditions;
@@ -18,7 +15,6 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
-import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -35,14 +31,8 @@ import javax.validation.constraints.NotNull;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getTokenFromRedis;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/19.
@@ -51,12 +41,10 @@ import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getTokenFrom
  */
 @Slf4j
 @Component
-public class DeviceIamClient extends AbstractHttpClient implements InitializingBean {
+public class DeviceIamClient extends AbstractHttpClient {
     private static final String DEVICE_IAM_API_VERSION = "v1";
     private static final String[] DEVICE_AUTH_PATH = {"auth"};
     private static final String[] DEVICE_ACCESS_TOKEN_PATH = {"device", "accessToken"};
-
-    private ExecutorService commonSideExecutor;
 
     // 14 * 24 * 60 * 60 = 1209600
     @Value("${expire.token.access: 300}")
@@ -65,35 +53,33 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
     @Value("${di.scheme:http://}")
     private String diScheme;
 
+    @Value("${di.url:}")
+    private String diUrl;
+
     @Nullable
     public DeviceResource auth(AuthorizationMessage authRequest) {
-        Response response = null;
-        try {
-            response = getDeviceResource(authRequest);
-            if (response.isSuccessful()) {
+        try(Response response = getDeviceResource(authRequest)) {
+            if (response != null && response.isSuccessful()) {
                 ResponseBody body = response.body();
                 Assert.notNull(body, "Authorization Response body is null");
                 DeviceResource deviceResource = JsonUtil.deserialize(body.string(), DeviceResource.class);
                 Assert.notNull(deviceResource, "Device resource is null");
-                log.debug("Read authorization info: {}", deviceResource);
+                log.debug("Read authorization info:\n{}", deviceResource);
 
                 deviceResource.setCuid(Optional.ofNullable(authRequest.getCuid()).orElse(authRequest.getUuid()));
                 Optional.ofNullable(authRequest.getDeviceIp()).ifPresent(deviceResource::setIp);
                 Optional.ofNullable(authRequest.getDevicePort()).ifPresent(deviceResource::setPort);
 
-                AccessTokenResponse accessTokenResponse = getAccessToken(deviceResource, authRequest);
-                if (accessTokenResponse != null) {
-                    deviceResource.setAccessToken(accessTokenResponse.getAccessToken());
+                String accessToken = getAccessToken(deviceResource, authRequest);
+                if (StringUtils.hasText(accessToken)) {
+                    deviceResource.setAccessToken(accessToken);
                     return deviceResource;
                 }
             }
         } catch (Exception e) {
             log.error("Authoring failed", e);
-        } finally {
-            close(response);
         }
 
-        log.error("Authoring failed, response from remote: {}", response);
         return null;
     }
 
@@ -104,7 +90,7 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
         return sendSync(request);
     }
 
-    private AccessTokenResponse getAccessToken(DeviceResource deviceResource, AuthorizationMessage authRequest) {
+    private String getAccessToken(DeviceResource deviceResource, AuthorizationMessage authRequest) {
         String cuid = deviceResource.getCuid();
         ProjectInfo projectInfo = deviceResource.getProjectInfo();
         Assert.notNull(projectInfo, "Project is null");
@@ -118,58 +104,41 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
      * @param cuid device cuid
      * @param vId project voice id
      * @param vKey project voice key
-     * @param logId log id
-     * @return {@link AccessTokenResponse}
+     * @param logId log id, in generally, sn
+     * @return access token string
      */
-    public AccessTokenResponse getAccessToken(String cuid, String vId, String vKey, String logId) {
+    public String getAccessToken(String cuid, String vId, String vKey, String logId) {
         AccessTokenRequest accessTokenRequest = new AccessTokenRequest(cuid, vId, vKey, logId);
-
-        AccessTokenResponse response = Optional.ofNullable(getTokenFromRedis(accessTokenRequest))
-                .orElseGet(() -> getAccessTokenFromIAM(accessTokenRequest));
-
-        if (response != null && StringUtils.hasText(response.getAccessToken())) {
+        String accessToken = getAccessTokenFromIAM(accessTokenRequest);
+        if (StringUtils.hasText(accessToken)) {
             log.debug("Obtain access token succeeded, writing to redis. logid:{}", logId);
-            commonSideExecutor.submit(() -> writeAccessTokenToDproxy(cuid, response.getAccessToken()));
-            return response;
+            return accessToken;
         }
         log.debug("Obtain access token failed. logid:{}", logId);
         return null;
     }
 
-    private void writeAccessTokenToDproxy(String cuid, String accessToken) {
-        DproxyClientProvider
-                .getInstance()
-                .hset(CommonConstant.SESSION_KEY_PREFIX + cuid,
-                        accessTokenExpire,
-                        CommonConstant.SESSION_DEVICE_ACCESS_TOKEN,
-                        new AccessTokenResponse(accessToken));
-    }
+
 
     @Nullable
     @Retryable(value = {SocketTimeoutException.class}, backoff = @Backoff(200))
-    private AccessTokenResponse getAccessTokenFromIAM(AccessTokenRequest accessTokenRequest) {
-        Response response = null;
-        try {
-            Request request = buildRequest(accessTokenRequest, DEVICE_ACCESS_TOKEN_PATH, HttpMethod.GET);
-            Assert.notNull(request, "Access Token Request is null");
-            response = sendSync(request);
-            if (response.isSuccessful()) {
+    private String getAccessTokenFromIAM(AccessTokenRequest accessTokenRequest) {
+        Request request = buildRequest(accessTokenRequest, DEVICE_ACCESS_TOKEN_PATH, HttpMethod.GET);
+        Assert.notNull(request, "Access Token Request is null");
+        try(Response response = sendSync(request)) {
+            if (response != null && response.isSuccessful()) {
                 ResponseBody body = response.body();
                 Assert.notNull(body, "Access Token Response body is null");
                 String accessToken = body.string();
                 if (StringUtils.hasText(accessToken)) {
-                    AccessTokenResponse accessTokenResponse = new AccessTokenResponse(accessToken);
-                    log.debug("Read access token info: {}", accessTokenResponse);
-                    return accessTokenResponse;
+                    log.debug("Read access token info: {}", accessToken);
+                    return accessToken;
                 }
             }
         } catch (Exception e) {
-            log.error("Getting access token from di failed", e);
-        } finally {
-            close(response);
+            log.error("Obtaining access token failed", e);
         }
 
-        log.error("Obtaining access token failed, response from remote: {}", response);
         return null;
     }
 
@@ -225,6 +194,8 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
         InetSocketAddress hashedAddress = BnsCache.getRandomDiAddress();
         if (hashedAddress != null) {
             domainAddress = PathUtil.dropOffPrefix(hashedAddress.toString(), SPLITTER_URL);
+        } else if (StringUtils.hasText(diUrl)) {
+            domainAddress = diUrl;
         }
         Preconditions.checkArgument(StringUtils.hasText(domainAddress), "Couldn't find any di address");
         return domainAddress;
@@ -235,12 +206,5 @@ public class DeviceIamClient extends AbstractHttpClient implements InitializingB
                 PathUtil.lookAfterSuffix(DEVICE_IAM_API_VERSION),
                 StringUtils.arrayToDelimitedString(path, SPLITTER_URL)
         );
-    }
-
-    @Override
-    public void afterPropertiesSet() throws Exception {
-        commonSideExecutor = new ThreadPoolExecutor(0, 20,
-                60L, TimeUnit.SECONDS,
-                new SynchronousQueue<>());
     }
 }

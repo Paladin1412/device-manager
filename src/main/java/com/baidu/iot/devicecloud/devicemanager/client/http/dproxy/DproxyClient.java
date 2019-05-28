@@ -2,17 +2,15 @@ package com.baidu.iot.devicecloud.devicemanager.client.http.dproxy;
 
 import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.AbstractHttpClient;
+import com.baidu.iot.devicecloud.devicemanager.client.http.callback.CallbackFuture;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.Call;
-import okhttp3.Callback;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
-import okhttp3.internal.annotations.EverythingIsNonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.lang.Nullable;
@@ -25,12 +23,11 @@ import org.springframework.util.StringUtils;
 
 
 import javax.validation.constraints.NotNull;
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
+import java.util.concurrent.CompletableFuture;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/20.
@@ -48,12 +45,10 @@ public class DproxyClient extends AbstractHttpClient {
 
     @Retryable(value = {RetryException.class}, backoff = @Backoff(200))
     public DproxyResponse sendCommand(DproxyRequest dproxyRequest) {
-        Response response = null;
-        try {
-            Request request = buildDproxyRequest(dproxyRequest);
-            Assert.notNull(request, "Dproxy Request is null");
-            response = sendSync(request);
-            if (response.isSuccessful()) {
+        Request request = buildDproxyRequest(dproxyRequest);
+        Assert.notNull(request, "Dproxy Request is null");
+        try(Response response = sendSync(request)) {
+            if (response != null && response.isSuccessful()) {
                 ResponseBody body = response.body();
                 Assert.notNull(body, "Dproxy Response body is null");
                 DproxyResponse commandInfo = JsonUtil.deserialize(body.string(), DproxyResponse.class);
@@ -63,38 +58,18 @@ public class DproxyClient extends AbstractHttpClient {
         } catch (Exception e) {
             log.error("Sending dproxy command failed", e);
             if (e instanceof SocketTimeoutException) {
-                close(response);
                 throw new RetryException(e.getMessage());
             }
-        } finally {
-            close(response);
+            log.error("Sending command failed", e);
         }
-
-        log.error("Sending command failed, response from remote: {}", response);
         return null;
     }
 
     @Retryable(value = {SocketTimeoutException.class}, backoff = @Backoff(200))
-    public void sendCommandAsync(DproxyRequest dproxyRequest) {
+    public CompletableFuture<Response> sendCommandAsync(DproxyRequest dproxyRequest) {
         Request request;
         request = buildDproxyRequest(dproxyRequest);
-        sendAsync(request, new Callback() {
-            @Override
-            @EverythingIsNonNull
-            public void onFailure(Call call, IOException e) {
-                log.error("Sending command to dproxy failed. request:{} error:{}",
-                        call.request().toString(), e.getMessage());
-            }
-
-            @Override
-            @EverythingIsNonNull
-            public void onResponse(Call call, Response response) throws IOException {
-                if (response.isSuccessful()) {
-                    log.debug("Sending command to dproxy succeed, request:{}", call.request().toString());
-                    close(response);
-                }
-            }
-        });
+        return sendAsyncWithFuture(request, new CallbackFuture());
     }
 
     @Nullable
@@ -104,21 +79,21 @@ public class DproxyClient extends AbstractHttpClient {
             return null;
         }
         Request.Builder builder = new Request.Builder()
-                .url(getFullPath(DPROXY_COMMAND_PATH))
+                .url(getFullPath())
                 .header(HttpHeaders.CONTENT_TYPE, org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
                 .post(requestBody);
 
         return builder.build();
     }
 
-    private String getFullPath(String[] path) {
+    private String getFullPath() {
         String domainAddress = getDomainAddress();
         if (!StringUtils.startsWithIgnoreCase(domainAddress, dproxyScheme)) {
             domainAddress = dproxyScheme + domainAddress;
         }
         return StringUtils.applyRelativePath(
                 PathUtil.lookAfterSuffix(domainAddress),
-                getFullRelativePath(path)
+                getFullRelativePath()
         );
     }
 
@@ -137,10 +112,10 @@ public class DproxyClient extends AbstractHttpClient {
         return domainAddress;
     }
 
-    private String getFullRelativePath(String[] path) {
+    private String getFullRelativePath() {
         return StringUtils.applyRelativePath(
                 PathUtil.lookAfterSuffix(DPROXY_ROOT),
-                StringUtils.arrayToDelimitedString(path, SPLITTER_URL)
+                StringUtils.arrayToDelimitedString(DproxyClient.DPROXY_COMMAND_PATH, SPLITTER_URL)
         );
     }
 }

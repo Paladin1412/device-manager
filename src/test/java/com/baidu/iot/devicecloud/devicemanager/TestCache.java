@@ -1,6 +1,7 @@
 package com.baidu.iot.devicecloud.devicemanager;
 
 import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
+import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -14,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 
@@ -25,6 +27,7 @@ import java.util.concurrent.Executors;
 public class TestCache {
     private final Logger logger = LoggerFactory.getLogger(TestCache.class);
     private LoadingCache<String, String> cache;
+    private Cache<String, Optional<String>> cache1;
     private int index;
 
     @Before
@@ -36,6 +39,18 @@ public class TestCache {
                 .recordStats()
                 .removalListener((RemovalListener<String, String>) n -> logger.info("Removed: ({}, {}), caused by: {}", n.getKey(), n.getValue(), n.getCause().toString()))
                 .build(CacheLoader.asyncReloading(new AddressCacheLoader(), Executors.newSingleThreadExecutor()));
+
+        cache1 = CacheBuilder.newBuilder()
+                .expireAfterWrite(Duration.ofSeconds(5))
+                .expireAfterAccess(Duration.ofSeconds(2))
+                .removalListener(
+                        (RemovalListener<String, Optional<String>>) n ->
+//                                logger.info("Removed Access Token: ({}, {}), caused by: {}",
+//                                        n.getKey(), n.getValue().orElse("null"), n.getCause().toString())
+                                System.out.println(String.format("Removed Access Token: (%s, %s), caused by: %s",
+                                        n.getKey(), n.getValue().orElse("null"), n.getCause().toString()))
+                )
+                .build();
     }
 
     private class AddressCacheLoader extends CacheLoader<String, String> {
@@ -65,6 +80,13 @@ public class TestCache {
             Thread.sleep(3000);
         }
         Thread.sleep(30000);
+    }
+
+    @Test
+    public void test1() throws ExecutionException, InterruptedException {
+        cache1.get("test1", () -> Optional.of("value1"));
+
+        Thread.sleep(10000);
     }
 
     @After

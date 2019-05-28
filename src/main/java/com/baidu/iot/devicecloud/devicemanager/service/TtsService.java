@@ -11,11 +11,11 @@ import okhttp3.ResponseBody;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/31.
@@ -32,47 +32,61 @@ public class TtsService {
         this.client = client;
     }
 
-    public void requestTTSAsync(TtsRequest message, boolean isPre) {
-        CompletableFuture<Response> future = client.requestTtsAsync(message, isPre);
+    public void requestTTSAsync(TtsRequest message, boolean isPre, Map<String, String> keysMap) {
+        CompletableFuture<Response> future = client.requestTtsAsync(message, isPre, keysMap);
         future.handle(((response, throwable) -> {
-            if (response.isSuccessful()) {
-                log.debug("TTS Proxy async request succeed.");
+            if (response != null && response.isSuccessful()) {
+                log.debug("TTS Proxy async request succeed. response: {}", response);
             }
             return null;
         }));
     }
 
-    public Map<String, String> requestTTSSync(TtsRequest message, boolean isPre) {
+    public CompletableFuture<Response> cacheAudioAsync(TtsRequest message, String contentId, String key) {
+        return client.cacheAudioAsync(message, contentId, key);
+    }
+
+    public Map<String, String> requestTTSSync(TtsRequest message, boolean isPre, Map<String, String> keysMap) {
         Map<String, String> urlmap = new HashMap<>();
-        Response response;
-        try {
-            response = client.requestTtsSync(message, isPre);
-        } catch (Exception e) {
-            log.warn(e.getMessage());
-            return urlmap;
-        }
-        if (response != null && response.isSuccessful() && !isPre) {
-            ResponseBody body = response.body();
-            if (body != null) {
-                try {
-                    JsonNode res = JsonUtil.readTree(body.string());
-                    JsonNode data = res.get("data");
-                    if (data != null && data.isTextual()) {
-                        JsonNode dataObject = JsonUtil.readTree(data.asText());
-                        if (dataObject != null && dataObject.has("url") && dataObject.has("keymap")) {
-                            String url = dataObject.get("url").asText();
-                            JsonNode keymap = dataObject.get("keymap");
-                            Iterator<Map.Entry<String, JsonNode>> it = keymap.fields();
-                            it.forEachRemaining(entry -> urlmap.put(entry.getKey(), PathUtil.lookAfterSuffix(url) + entry.getValue().asText()));
-                        }
-                    }
-                } catch (IOException e) {
-                    log.error("Requesting tts in a sync way failed", e);
-                } finally {
-                    response.close();
+        try(Response response = client.requestTtsSync(message, isPre, keysMap)) {
+            if (response != null && response.isSuccessful() && !isPre) {
+                ResponseBody body = response.body();
+                if (body != null) {
+                    decodeTtsProxyResponse(body.string(), urlmap);
                 }
             }
+        } catch (Exception e) {
+            log.error("Requesting tts in a sync way failed", e);
         }
         return urlmap;
+    }
+
+    public Map<String, String> requestAudioUrl(String cuid, String sn, String cid, int messageType) {
+        Map<String, String> urlmap = new HashMap<>();
+        try(Response response = client.requestAudioUrl(cuid, sn, cid, messageType)) {
+            if (response != null && response.isSuccessful()) {
+                ResponseBody body = response.body();
+                if (body != null) {
+                    decodeTtsProxyResponse(body.string(), urlmap);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Requesting tts url in a sync way failed", e);
+        }
+        return urlmap;
+    }
+
+    public void decodeTtsProxyResponse(String responseString, Map<String, String> urlmap) {
+        JsonNode res = JsonUtil.readTree(responseString);
+        JsonNode data = res.get("data");
+        if (data != null && data.isTextual()) {
+            JsonNode dataObject = JsonUtil.readTree(data.asText());
+            if (dataObject != null && dataObject.has("url") && dataObject.has("keymap")) {
+                String url = dataObject.get("url").asText();
+                JsonNode keymap = dataObject.get("keymap");
+                Iterator<Map.Entry<String, JsonNode>> it = keymap.fields();
+                it.forEachRemaining(entry -> urlmap.put(entry.getKey(), PathUtil.lookAfterSuffix(url) + entry.getValue().asText()));
+            }
+        }
     }
 }

@@ -3,7 +3,6 @@ package com.baidu.iot.devicecloud.devicemanager.service;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dcsclient.DcsProxyClient;
-import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenResponse;
 import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
 import com.baidu.iot.devicecloud.devicemanager.util.HttpUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +15,6 @@ import reactor.core.publisher.Mono;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.USER_STATE_DISCONNECTED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.USER_STATE_EXCEPTION;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deleteTokenFromRedis;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.dependentResponse;
 
 /**
@@ -68,13 +66,11 @@ public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMess
     private Response informDcsProxy(BaseMessage message, String stateName) {
         String cuid = message.getDeviceId();
         log.debug("Getting access token from dproxy for cuid:{}", cuid);
-        AccessTokenResponse response = accessTokenService.try2ObtainAccessToken(message);
-        if (response != null && StringUtils.hasText(response.getAccessToken())) {
-            return dcsProxyClient.adviceUserState(message,
-                    response.getAccessToken(), stateName);
+        String accessToken = accessTokenService.getAccessToken(cuid, message.getLogId());
+        if (StringUtils.hasText(accessToken)) {
+            return dcsProxyClient.adviceUserState(message, accessToken, stateName);
         }
-        log.error("Couldn't obtain the access token from dproxy, maybe caused by illegal request. AccessTokenResponse={}",
-                response);
+        log.error("Couldn't obtain the access token from dproxy, maybe caused by illegal request");
         return null;
     }
 
@@ -84,7 +80,7 @@ public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMess
             log.debug("Releasing the assigned dcs address {}:{} from {}",
                     url.host(), url.port(), message.getDeviceId());
             AddressCache.cache.invalidate(AddressCache.getDcsAddressKey(message.getDeviceId()));
-            deleteTokenFromRedis(message.getDeviceId());
+            accessTokenService.releaseAccessToken(message);
         } catch (Exception ignore) {
             log.warn("Releasing the assigned dcs address from {} failed", message.getDeviceId());
         }
