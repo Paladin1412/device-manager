@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit;
  *
  * @author <a href="mailto:yaogang AT baidu DOT com">Yao Gang</a>
  */
-public class OkHttpH1ClientPool {
+class OkHttpH1ClientPool {
     private static OkHttpClient ourInstance;
 
     static {
@@ -28,7 +28,7 @@ public class OkHttpH1ClientPool {
                 .build();
     }
 
-    public static OkHttpClient getInstance() {
+    static OkHttpClient getInstance() {
         return ourInstance;
     }
 

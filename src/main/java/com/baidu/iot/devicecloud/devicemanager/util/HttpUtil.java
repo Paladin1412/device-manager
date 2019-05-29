@@ -27,6 +27,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS;
@@ -112,6 +113,15 @@ public class HttpUtil {
 
     public static Function<BaseMessage, BaseResponse> successResponsesWithMessage =
             (BaseMessage message) -> successResponses.apply(message != null ? message.getLogId() : null);
+
+    public static Function<Integer, DataPointMessage> defaultDataPointResponses =
+            code -> {
+                DataPointMessage response = new DataPointMessage();
+                response.setVersion(DEFAULT_VERSION);
+                response.setCode(code);
+                response.setId(IdGenerator.nextId());
+                return response;
+            };
 
     private static BiFunction<Integer, String, DataPointMessage> parseErrorDataPointMessage =
             (code, content) -> {

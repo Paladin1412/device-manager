@@ -1,6 +1,7 @@
 package com.baidu.iot.devicecloud.devicemanager.service;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
+import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dcsclient.DcsProxyClient;
 import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE_DH2;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.USER_STATE_DISCONNECTED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.USER_STATE_EXCEPTION;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.dependentResponse;
@@ -52,7 +54,9 @@ public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMess
                 if (response != null) {
                     releaseResource(response, message);
                 }
-                sink.success(dependentResponse.apply(message, response));
+                BaseResponse baseResponse = dependentResponse.apply(message, response);
+                baseResponse.setStatus(MESSAGE_SUCCESS_CODE_DH2);
+                sink.success(baseResponse);
             } catch (Exception e) {
                 sink.error(e);
             } finally {

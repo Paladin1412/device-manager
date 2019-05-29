@@ -114,17 +114,11 @@ public class ReportHandler {
                         } else {
                             failed.accept(builder);
                         }
-                        return builder.syncBody(o);
                     } else if (o instanceof BaseResponse) {
                         BaseResponse response = (BaseResponse) o;
-                        if (response.getCode() == MESSAGE_SUCCESS_CODE) {
-                            succeeded.accept(builder);
-                        } else {
-                            failed.accept(builder);
-                        }
-                        return builder.build();
+                        state.accept(builder, Integer.toString(response.getStatus()));
                     }
-                    return Mono.empty();
+                    return builder.syncBody(o);
                 })
                 .switchIfEmpty(Mono.defer(() -> {
                     failed.accept(builder);

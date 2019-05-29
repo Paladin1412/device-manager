@@ -1,6 +1,7 @@
 package com.baidu.iot.devicecloud.devicemanager.service;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
+import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebInputException;
 import reactor.core.publisher.Mono;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE_DH2;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponsesWithMessage;
 
 /**
@@ -39,7 +41,11 @@ public class HearBeatService extends AbstractLinkableHandlerAdapter<BaseMessage>
                                     message.getDeviceId(), message.getDeviceIp(), message.getDevicePort());
                             this.accessTokenService.getAccessToken(message.getDeviceId(), message.getLogId());
                         })
-                        .flatMap(msg -> Mono.just(successResponsesWithMessage.apply(msg)))
+                        .flatMap(msg -> {
+                            BaseResponse response = successResponsesWithMessage.apply(msg);
+                            response.setStatus(MESSAGE_SUCCESS_CODE_DH2);
+                            return Mono.just(response);
+                        })
                         .switchIfEmpty(Mono.defer(() ->Mono.error(new ServerWebInputException("No heartbeat"))))
         );
     }

@@ -1,5 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.bean;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -26,4 +27,7 @@ public class BaseResponse {
     private String logId;
 
     private String data;
+
+    @JsonIgnore
+    private int status;
 }

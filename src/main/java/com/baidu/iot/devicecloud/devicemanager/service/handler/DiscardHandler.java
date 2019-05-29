@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponses;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_NOT_ACCEPTABLE;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/4/24.
@@ -23,7 +23,8 @@ public class DiscardHandler extends AbstractLinkableDataPointHandler {
 
     @Override
     Mono<Object> work(DataPointMessage message) {
-        log.debug("This message will be just discarded.");
-        return Mono.just(successResponses.apply(message.getLogId()));
+        log.debug("This message will be just discarded. logid:{}", message.getLogId());
+        message.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_NOT_ACCEPTABLE);
+        return Mono.just(message);
     }
 }
