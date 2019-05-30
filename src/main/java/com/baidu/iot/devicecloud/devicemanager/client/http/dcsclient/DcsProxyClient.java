@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
@@ -52,7 +53,7 @@ public class DcsProxyClient extends AbstractHttpClient {
     @Value("${dcs.proxy.address.state:}")
     private String dcsProxyStateAddress;
 
-    public Response adviceUserState(BaseMessage message, String accessToken, String stateName) {
+    public Response adviceUserState(BaseMessage message, String accessToken, String stateName) throws IOException {
         DcsUserStateRequestHeader header = DcsUserStateRequestHeaderBuilder.buildFrom(message, accessToken);
         DcsUserStateRequestBody body = DcsUserStateRequestBodyBuilder.build(stateName, message.getCltId());
         log.debug("DcsUserStateRequestHeader: {} logid:{}", header, message.getLogId());
@@ -78,7 +79,7 @@ public class DcsProxyClient extends AbstractHttpClient {
 
     private Response sendSync(DcsUserStateRequestHeader dcsUserStateRequestHeader,
                               DcsUserStateRequestBody dcsUserStateRequestBody,
-                              BaseMessage message) {
+                              BaseMessage message) throws IOException {
         Request request = buildRequest(dcsUserStateRequestHeader, dcsUserStateRequestBody, message);
         Assert.notNull(request, "DCS Proxy Request is null");
         return sendSync(request);

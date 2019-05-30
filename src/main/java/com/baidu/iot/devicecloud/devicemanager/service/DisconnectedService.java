@@ -5,7 +5,6 @@ import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dcsclient.DcsProxyClient;
 import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
-import com.baidu.iot.devicecloud.devicemanager.util.HttpUtil;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.HttpUrl;
 import okhttp3.Response;
@@ -13,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
+
+import java.io.IOException;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE_DH2;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.USER_STATE_DISCONNECTED;
@@ -47,10 +48,8 @@ public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMess
     Mono<Object> work(BaseMessage message) {
         int type = message.getMessageType();
         return Mono.create(sink -> {
-            Response response = null;
-            try {
-                response = informDcsProxy(message,
-                        type == MessageType.SYS_DISCONNECTED ? USER_STATE_DISCONNECTED : USER_STATE_EXCEPTION);
+            try(Response response = informDcsProxy(message,
+                    type == MessageType.SYS_DISCONNECTED ? USER_STATE_DISCONNECTED : USER_STATE_EXCEPTION)) {
                 if (response != null) {
                     releaseResource(response, message);
                 }
@@ -59,15 +58,13 @@ public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMess
                 sink.success(baseResponse);
             } catch (Exception e) {
                 sink.error(e);
-            } finally {
-                HttpUtil.close(response);
             }
 
             sink.success();
         });
     }
 
-    private Response informDcsProxy(BaseMessage message, String stateName) {
+    private Response informDcsProxy(BaseMessage message, String stateName) throws IOException {
         String cuid = message.getDeviceId();
         log.debug("Getting access token from dproxy for cuid:{}", cuid);
         String accessToken = accessTokenService.getAccessToken(cuid, message.getLogId());

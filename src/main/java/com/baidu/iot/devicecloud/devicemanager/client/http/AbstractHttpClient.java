@@ -5,7 +5,6 @@ import com.baidu.iot.devicecloud.devicemanager.client.http.callback.CallbackFutu
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Call;
-import okhttp3.Callback;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -32,19 +31,8 @@ public abstract class AbstractHttpClient implements IHttpClient {
     }
 
     @Override
-    public Response sendSync(@NotNull Request request) {
-        try {
-            return client.newCall(request).execute();
-        } catch (IOException e) {
-            log.error("Sending a sync call failed", e);
-        }
-        return null;
-    }
-
-    @Override
-    public void sendAsync(Request request, Callback callback) {
-        Call call = client.newCall(request);
-        call.enqueue(callback);
+    public Response sendSync(@NotNull Request request) throws IOException {
+        return client.newCall(request).execute();
     }
 
     @Override

@@ -28,6 +28,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.Optional;
@@ -84,7 +85,7 @@ public class DeviceIamClient extends AbstractHttpClient {
     }
 
     @Retryable(value = {SocketTimeoutException.class}, backoff = @Backoff(200))
-    private Response getDeviceResource(AuthorizationMessage authRequest) {
+    private Response getDeviceResource(AuthorizationMessage authRequest) throws IOException {
         Request request = buildRequest(authRequest, DEVICE_AUTH_PATH, HttpMethod.POST);
         Assert.notNull(request, "Authorization Request is null");
         return sendSync(request);

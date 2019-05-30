@@ -21,6 +21,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import javax.validation.constraints.NotNull;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.Optional;
@@ -45,7 +46,7 @@ public class DhClient extends AbstractHttpClient {
     private String dhScheme;
 
     @Retryable(value = {SocketTimeoutException.class}, backoff = @Backoff(200))
-    public Response pushMessage(DataPointMessage message) {
+    public Response pushMessage(DataPointMessage message) throws IOException {
         Request request = buildRequest(message);
         log.debug("Pushing {} to dh", JsonUtil.serialize(message));
         log.debug("Request dh {}", request);

@@ -25,6 +25,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import javax.validation.constraints.NotNull;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Optional;
@@ -64,13 +65,13 @@ public class TtsProxyClient extends AbstractHttpClient {
         return sendAsyncWithFuture(request, new CallbackFuture());
     }
 
-    public Response requestTtsSync(TtsRequest message, boolean isPre, Map<String, String> keysMap) {
+    public Response requestTtsSync(TtsRequest message, boolean isPre, Map<String, String> keysMap) throws IOException {
         Request request = buildJsonTtsRequest(message, isPre, keysMap);
         Assert.notNull(request, "TTS Proxy Request is null");
         return sendSync(request);
     }
 
-    public Response requestAudioUrl(String cuid, String sn, String cid, int messageType) {
+    public Response requestAudioUrl(String cuid, String sn, String cid, int messageType) throws IOException {
         Request request = buildRequest(cuid, sn, cid, messageType);
         Assert.notNull(request, "TTS Proxy Request is null");
         return sendSync(request);

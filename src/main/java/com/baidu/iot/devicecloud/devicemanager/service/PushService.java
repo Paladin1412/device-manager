@@ -12,6 +12,7 @@ import com.google.common.cache.CacheBuilder;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.Response;
 import okhttp3.ResponseBody;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -118,23 +119,22 @@ public class PushService implements InitializingBean {
     }
 
     public Mono<BaseResponse> push(DataPointMessage message) {
-        return Mono.from(Mono.justOrEmpty(
-                this.client.pushMessage(message))
-                .flatMap(response -> {
-                    try(ResponseBody body = response.body()) {
-                        if (response.isSuccessful()) {
-                            if (log.isDebugEnabled() && body != null) {
-                                //noinspection BlockingMethodInNonBlockingContext
-                                log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(body.bytes())));
-                            }
-                            return Mono.just(successResponsesWithMessage.apply(message));
-                        }
-                    } catch (Exception ignore) {}
-
-                    return Mono.empty();
-                })
-                .switchIfEmpty(Mono.defer(() ->Mono.just(failedResponses.apply(message.getLogId(), "Pushing dh failed"))))
-        );
+        //noinspection BlockingMethodInNonBlockingContext
+        try(Response response = this.client.pushMessage(message)) {
+            if (response != null && response.isSuccessful()) {
+                if (log.isDebugEnabled()) {
+                    ResponseBody body = response.body();
+                    if (body != null) {
+                        //noinspection BlockingMethodInNonBlockingContext
+                        log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(body.bytes())));
+                    }
+                }
+                return Mono.just(successResponsesWithMessage.apply(message));
+            }
+        } catch (Exception e) {
+            log.error("Pushing dh failed", e);
+        }
+        return Mono.just(failedResponses.apply(message.getLogId(), "Pushing dh failed"));
     }
 
     public Mono<BaseResponse> check(BaseMessage message, String key, List<Integer> stub) {

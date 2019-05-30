@@ -1,10 +1,10 @@
 package com.baidu.iot.devicecloud.devicemanager.client.http;
 
 import com.baidu.iot.devicecloud.devicemanager.client.http.callback.CallbackFuture;
-import okhttp3.Callback;
 import okhttp3.Request;
 import okhttp3.Response;
 
+import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -13,7 +13,6 @@ import java.util.concurrent.CompletableFuture;
  * @author <a href="mailto:yaogang AT baidu DOT com">Yao Gang</a>
  */
 public interface IHttpClient {
-    Response sendSync(Request request);
-    void sendAsync(Request request, Callback callback);
+    Response sendSync(Request request) throws IOException;
     CompletableFuture sendAsyncWithFuture(Request request, CallbackFuture callback);
 }
