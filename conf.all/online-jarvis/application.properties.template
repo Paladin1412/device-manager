@@ -17,12 +17,12 @@ dcs.proxy.address.state=
 dcs.proxy.address.asr=
 dcs.proxy.address.evt=
 
-tts.proxy.bns=unknown_bns_ttsProxy
+tts.proxy.bns=group.ttsproxy-jarvis-online.IOT.all
 tts.proxy.api=
 #tts.proxy.api=127.0.0.1:8099
 
 dh.bns=unknown_bns_dh
-dh.api=10.115.54.25:8207
+dh.api=10.211.245.46:8206
 
 local.server.port=
 local.server.bns=
