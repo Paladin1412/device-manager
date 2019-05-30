@@ -107,11 +107,14 @@ public class PushService implements InitializingBean {
             } else {
                 redirectClient.redirectDataPointAsync(ip, port, message).handleAsync(
                         (r, t) -> {
-                            if (r != null && r.isSuccessful()) {
-                                log.info("Redirecting to {}:{} succeeded", ip, port);
+                            try {
+                                if (r != null && r.isSuccessful()) {
+                                    log.info("Redirecting to {}:{} succeeded", ip, port);
+                                }
+                                return null;
+                            } finally {
+                                close(r);
                             }
-                            close(r);
-                            return null;
                         }
                 );
             }

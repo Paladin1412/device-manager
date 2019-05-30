@@ -50,6 +50,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_PRIVATE_ERROR;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_STATUS;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedDataPointResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.projectExist;
 
@@ -116,34 +117,36 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                 .filter(deviceResource -> deviceResource != null && StringUtils.hasText(deviceResource.getAccessToken()))
                 .doOnNext(this::writeProjectInfoToDproxy)
                 .flatMap(deviceResource ->
-                        Mono.fromFuture(informDcsProxyAsync(deviceResource, msg))
-                        .flatMap(response -> {
-                            try(ResponseBody body = response.body()) {
-                                if (response.isSuccessful() && body != null) {
-                                    //noinspection BlockingMethodInNonBlockingContext
-                                    JsonNode jsonNode = JsonUtil.readTree(body.bytes());
-                                    log.debug("Dcs responses: {}", jsonNode.toString());
-                                    if (jsonNode.path(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE) {
-                                        assignAddr(response, deviceResource);
-                                        return Mono.just(successResponses.get());
-                                    } else {
-                                        ArrayNode data = (ArrayNode)jsonNode.path(JSON_KEY_DATA);
-                                        if (data != null && data.size() > 0) {
-                                            DataPointMessage failed = new DataPointMessage();
-                                            failed.setVersion(DEFAULT_VERSION);
-                                            failed.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED);
-                                            failed.setId(IdGenerator.nextId());
-                                            failed.setPath(PathUtil.lookAfterPrefix(DATA_POINT_PRIVATE_ERROR));
-                                            failed.setPayload(data.get(0).toString());
-                                            return Mono.just(failed);
+                        Mono.fromFuture(informDcsProxyAsync(deviceResource, msg).handleAsync(
+                                (response, throwable) -> {
+                                    try(ResponseBody body = response.body()) {
+                                        if (response.isSuccessful() && body != null) {
+                                            JsonNode jsonNode = JsonUtil.readTree(body.bytes());
+                                            log.debug("Dcs responses: {}", jsonNode.toString());
+                                            if (jsonNode.path(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE) {
+                                                assignAddr(response, deviceResource);
+                                                return successResponses.get();
+                                            } else {
+                                                ArrayNode data = (ArrayNode)jsonNode.path(JSON_KEY_DATA);
+                                                if (data != null && data.size() > 0) {
+                                                    DataPointMessage failed = new DataPointMessage();
+                                                    failed.setVersion(DEFAULT_VERSION);
+                                                    failed.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED);
+                                                    failed.setId(IdGenerator.nextId());
+                                                    failed.setPath(PathUtil.lookAfterPrefix(DATA_POINT_PRIVATE_ERROR));
+                                                    failed.setPayload(data.get(0).toString());
+                                                    return failed;
+                                                }
+                                            }
                                         }
+                                    } catch (Exception e){
+                                        log.error("Checking if the dcs response ok failed", e);
+                                    } finally {
+                                        close(response);
                                     }
+                                    return null;
                                 }
-                            } catch (Exception e){
-                                log.error("Checking if the dcs response ok failed", e);
-                            }
-                            return Mono.empty();
-                        }))
+                        )))
                 .onErrorResume(Mono::error)
                 .switchIfEmpty(
                         Mono.defer(() ->

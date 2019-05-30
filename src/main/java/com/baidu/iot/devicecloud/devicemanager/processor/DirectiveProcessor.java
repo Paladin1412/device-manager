@@ -64,6 +64,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant
 import static com.baidu.iot.devicecloud.devicemanager.util.BufferUtil.joinBuffers;
 import static com.baidu.iot.devicecloud.devicemanager.util.DirectiveUtil.addExtraInfo;
 import static com.baidu.iot.devicecloud.devicemanager.util.DirectiveUtil.assembleDuerPrivateDirective;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isPreTTSTlv;
 
 /**
@@ -407,6 +408,8 @@ public class DirectiveProcessor {
                             }
                         } catch (IOException e) {
                             log.error("Requesting tts in async way failed", e);
+                        } finally {
+                            close(r);
                         }
                         return null;
                     }

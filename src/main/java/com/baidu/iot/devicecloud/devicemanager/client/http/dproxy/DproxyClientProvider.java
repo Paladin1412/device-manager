@@ -82,11 +82,15 @@ public class DproxyClientProvider implements InitializingBean {
         try {
             return dproxyClient.sendCommandAsync(request).handleAsync(
                     (r, t) -> {
-                        if (!r.isSuccessful()) {
+                        try {
+                            if (!r.isSuccessful()) {
+                                close(r);
+                                throw new RetryException("Retry");
+                            }
+                            return r;
+                        } finally {
                             close(r);
-                            throw new RetryException("Retry");
                         }
-                        return r;
                     }
             );
         } catch (Exception e) {
@@ -127,11 +131,14 @@ public class DproxyClientProvider implements InitializingBean {
         try {
             dproxyClient.sendCommandAsync(request).handleAsync(
                     (r, t) -> {
-                        if (r.isSuccessful()) {
-                            log.debug("Deleting {} from redis succeeded", key);
+                        try {
+                            if (r.isSuccessful()) {
+                                log.debug("Deleting {} from redis succeeded", key);
+                            }
+                            return null;
+                        } finally {
+                            close(r);
                         }
-                        close(r);
-                        return null;
                     }
             );
         } catch (Exception e) {

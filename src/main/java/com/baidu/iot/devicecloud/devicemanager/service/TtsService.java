@@ -16,6 +16,8 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
+
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/31.
@@ -35,10 +37,14 @@ public class TtsService {
     public void requestTTSAsync(TtsRequest message, boolean isPre, Map<String, String> keysMap) {
         CompletableFuture<Response> future = client.requestTtsAsync(message, isPre, keysMap);
         future.handle(((response, throwable) -> {
-            if (response != null && response.isSuccessful()) {
-                log.debug("TTS Proxy async request succeed. response: {}", response);
+            try {
+                if (response != null && response.isSuccessful()) {
+                    log.debug("TTS Proxy async request succeed. response: {}", response);
+                }
+                return null;
+            } finally {
+                close(response);
             }
-            return null;
         }));
     }
 
