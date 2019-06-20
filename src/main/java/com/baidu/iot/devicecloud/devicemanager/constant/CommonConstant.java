@@ -22,6 +22,7 @@ public class CommonConstant {
     public static final String HEADER_ALIVE_INTERVAL = "X-ALIVE-INTERVAL";
     public static final String HEADER_STATUS_CODE = "X-STATUS-CODE";
     public static final String HEADER_PRE_TTS = "X-PRE-TTS";
+    public static final String HEADER_AUTH_TOKEN = "X-Auth-Token";
 
     public static final String MESSAGE_ACK_NEED = "needAck";
     public static final String MESSAGE_ACK_SECRET_KEY = "secretKey";
@@ -53,14 +54,15 @@ public class CommonConstant {
     public static final String SPLITTER_SPACE = " ";
     public static final String SPLITTER_EQUALITY_SIGN = "=";
     public static final String SPLITTER_SEMICOLON = ";";
+    public static final String SPLITTER_LF = "\n";
 
     public static final String DATETIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
     public static final String SESSION_KEY_PREFIX = "device:session:";
     public static final String SESSION_DEVICE_ACCESS_TOKEN = "accessToken";
 
-    public static final String PROJECT_INFO_KEY_PREFIX = "duer:iot:sh:info:project:";
-    public static final String PROJECT_INFO = "projectInfo";
+    public static final String DEVICE_RESOURCE_KEY_PREFIX = "duer:iot:sh:info:device:";
+    public static final String DEVICE_INFO = "deviceInfo";
 
     public static final String MESSAGE_SUCCESS = "success";
     public static final int MESSAGE_SUCCESS_CODE = 0;

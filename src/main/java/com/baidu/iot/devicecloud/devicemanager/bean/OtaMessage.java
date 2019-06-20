@@ -9,7 +9,7 @@ import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 /**
- * Created by Yao Gang (yaogang@baidu.com) on 2019/3/19.
+ * Created by Yao Gang (yaogang@baidu.com) on 2019/6/11.
  *
  * @author <a href="mailto:yaogang AT baidu DOT com">Yao Gang</a>
  */
@@ -18,17 +18,21 @@ import lombok.ToString;
 @EqualsAndHashCode()
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class BaseResponse {
-    private int code;
-
-    private String message;
-
-    @JsonProperty("logid")
-    private String logId;
-
-    @JsonProperty("payload")
-    private String data;
-
+public class OtaMessage {
     @JsonIgnore
-    private int status;
+    private String uuid;
+    @JsonIgnore
+    private String dialogRequestId;
+    @JsonIgnore
+    private String messageId;
+    @JsonProperty("transaction")
+    private String taskId;
+    private String version;
+    @JsonProperty("old_version")
+    private String oldVersion;
+    private String url;
+    private String signature;
+    private long size;
+
+    private OtaStrategyType strategy;
 }

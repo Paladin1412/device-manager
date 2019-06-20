@@ -1,5 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.util;
 
+import com.baidu.iot.devicecloud.devicemanager.bean.OtaMessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -16,14 +17,22 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PA
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.COMMAND_SPEAK;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DIRECTIVE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DLP_PAYLOAD;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DLP_UUID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_DIALOG_ID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_DLP_REQUEST_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_MESSAGE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_NAME;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_NAMESPACE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_PAYLOAD;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_PAYLOAD_URL;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DLP_OTA_NAMESPACE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DLP_OTA_UPDATE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.VOICE_OUTPUT_NAMESPACE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.VOICE_OUTPUT_STOP_SPEAK_NAME;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.PRIVATE_PROTOCOL_NAMESPACE;
+import static com.baidu.iot.devicecloud.devicemanager.util.JsonUtil.valueToTree;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/4/17.
@@ -50,10 +59,8 @@ public class DirectiveUtil {
                     TextNode.valueOf(dialogId));
         }
 
-        if (!StringUtils.isEmpty(messageId)) {
-            header.set(DIRECTIVE_KEY_HEADER_MESSAGE_ID,
-                    TextNode.valueOf(StringUtils.hasText(messageId) ? messageId : UUID.randomUUID().toString()));
-        }
+        header.set(DIRECTIVE_KEY_HEADER_MESSAGE_ID,
+                TextNode.valueOf(StringUtils.hasText(messageId) ? messageId : UUID.randomUUID().toString()));
 
         //
         directive.set(DIRECTIVE_KEY_HEADER, header);
@@ -65,6 +72,64 @@ public class DirectiveUtil {
         data.set(DIRECTIVE_KEY_DIRECTIVE, directive);
         data.set("iot_cloud_extra", extraData);
         return data;
+    }
+
+    public static JsonNode assembleDlpOtaDirective(OtaMessage message, final int index) {
+        ObjectNode data      = JsonUtil.createObjectNode();
+        ObjectNode directive = JsonUtil.createObjectNode();
+        ObjectNode header    = JsonUtil.createObjectNode();
+        ObjectNode payload   = JsonUtil.createObjectNode();
+
+        header.set(
+                DIRECTIVE_KEY_HEADER_NAMESPACE,
+                TextNode.valueOf(DLP_OTA_NAMESPACE)
+        );
+        header.set(DIRECTIVE_KEY_HEADER_NAME, TextNode.valueOf(DLP_OTA_UPDATE));
+
+        String messageId = message.getMessageId();
+        header.set(DIRECTIVE_KEY_HEADER_MESSAGE_ID,
+                TextNode.valueOf(StringUtils.hasText(messageId) ? messageId : UUID.randomUUID().toString()));
+
+        String requestId = message.getDialogRequestId();
+        if (StringUtils.hasText(requestId)) {
+            payload.set(DIRECTIVE_KEY_HEADER_DLP_REQUEST_ID,
+                    TextNode.valueOf(requestId));
+        }
+
+        payload.set(
+                DIRECTIVE_KEY_DLP_PAYLOAD,
+                valueToTree(message)
+        );
+        payload.set(
+                DIRECTIVE_KEY_DLP_UUID,
+                TextNode.valueOf(message.getUuid())
+        );
+
+        directive.set(DIRECTIVE_KEY_HEADER, header);
+        directive.set(DIRECTIVE_KEY_PAYLOAD, payload);
+        data.set(DIRECTIVE_KEY_DIRECTIVE, directive);
+
+        return addExtraInfo(data, index);
+    }
+
+    public static JsonNode assembleStopSpeakDirective(final int index) {
+        ObjectNode data      = JsonUtil.createObjectNode();
+        ObjectNode directive = JsonUtil.createObjectNode();
+        ObjectNode header    = JsonUtil.createObjectNode();
+        ObjectNode payload   = JsonUtil.createObjectNode();
+
+        directive.set(DIRECTIVE_KEY_HEADER, header);
+        directive.set(DIRECTIVE_KEY_PAYLOAD, payload);
+        data.set(DIRECTIVE_KEY_DIRECTIVE, directive);
+
+        header.set(
+                DIRECTIVE_KEY_HEADER_NAMESPACE,
+                TextNode.valueOf(VOICE_OUTPUT_NAMESPACE)
+        );
+        header.set(DIRECTIVE_KEY_HEADER_NAME, TextNode.valueOf(VOICE_OUTPUT_STOP_SPEAK_NAME));
+        header.set(DIRECTIVE_KEY_HEADER_MESSAGE_ID,
+                TextNode.valueOf(UUID.randomUUID().toString()));
+        return addExtraInfo(data, index);
     }
 
     public static Predicate<JsonNode> isSpeak =

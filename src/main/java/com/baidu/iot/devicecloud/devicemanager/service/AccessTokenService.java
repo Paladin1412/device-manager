@@ -2,6 +2,7 @@ package com.baidu.iot.devicecloud.devicemanager.service;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.AuthorizationMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
+import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.DeviceIamClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
@@ -19,12 +20,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deleteTokenFromRedis;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getProjectInfoFromRedis;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getDeviceInfoFromRedis;
 
 /**
  * <p>Common access token service.</p>
@@ -107,7 +107,7 @@ public class AccessTokenService {
     public String getAccessToken(String cuid, String logId) {
         try {
             return atCache.get(cuid, () -> try2ObtainAccessToken(cuid, logId));
-        } catch (ExecutionException e) {
+        } catch (Exception e) {
             log.error("Obtaining access token failed", e);
             return null;
         }
@@ -138,26 +138,29 @@ public class AccessTokenService {
         String accessToken = HttpUtil.getTokenFromRedis(cuid);
         if (StringUtils.isEmpty(accessToken)) {
             // try to get project info from redis, which should'v been written into at authorization time.
-            ProjectInfo projectInfo = getProjectInfoFromRedis(cuid);
-            if (projectInfo != null
-                    && StringUtils.hasText(projectInfo.getVoiceId())
-                    && StringUtils.hasText(projectInfo.getVoiceKey())) {
-                String vId = projectInfo.getVoiceId();
-                String vKey = projectInfo.getVoiceKey();
-                // try to get access token by using project info
-                String at = deviceIamClient.getAccessToken(cuid, vId, vKey, logId);
-                if (StringUtils.hasText(at)) {
-                    CompletableFuture<Response> future = writeTokenToRedis(cuid, at);
-                    if (future != null) {
-                        future.handleAsync(
-                                (r, t) -> {
-                                    close(r);
-                                    return null;
-                                }
-                        );
+            DeviceResource deviceResource = getDeviceInfoFromRedis(cuid);
+            if (deviceResource != null) {
+                ProjectInfo projectInfo = deviceResource.getProjectInfo();
+                if (projectInfo != null
+                        && StringUtils.hasText(projectInfo.getVoiceId())
+                        && StringUtils.hasText(projectInfo.getVoiceKey())) {
+                    String vId = projectInfo.getVoiceId();
+                    String vKey = projectInfo.getVoiceKey();
+                    // try to get access token by using project info
+                    String at = deviceIamClient.getAccessToken(cuid, vId, vKey, logId);
+                    if (StringUtils.hasText(at)) {
+                        CompletableFuture<Response> future = writeTokenToRedis(cuid, at);
+                        if (future != null) {
+                            future.handleAsync(
+                                    (r, t) -> {
+                                        close(r);
+                                        return null;
+                                    }
+                            );
+                        }
                     }
+                    return at;
                 }
-                return at;
             }
         }
 
@@ -167,6 +170,6 @@ public class AccessTokenService {
     private CompletableFuture<Response> writeTokenToRedis(final String cuid, final String accessToken) {
         return DproxyClientProvider
                 .getInstance()
-                .setexAsync(CommonConstant.SESSION_KEY_PREFIX + cuid, accessTokenExpire, accessToken);
+                .setexAsync(CommonConstant.SESSION_KEY_PREFIX + cuid, -1, accessToken);
     }
 }

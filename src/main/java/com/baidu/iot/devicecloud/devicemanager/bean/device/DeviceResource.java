@@ -56,4 +56,6 @@ public class DeviceResource {
     private String port;
 
     private String accessToken;
+
+    private String cltId;
 }

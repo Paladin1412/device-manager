@@ -4,6 +4,7 @@ import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.AbstractHttpClient;
+import com.baidu.iot.devicecloud.devicemanager.client.http.callback.CallbackFuture;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
@@ -25,6 +26,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CLT_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_LOG_ID;
@@ -51,6 +53,13 @@ public class DhClient extends AbstractHttpClient {
         log.debug("Pushing {} to dh", JsonUtil.serialize(message));
         log.debug("Request dh {}", request);
         return sendSync(request);
+    }
+
+    public CompletableFuture<Response> pushMessageAsync(DataPointMessage message) {
+        Request request = buildRequest(message);
+        log.debug("Pushing {} to dh", JsonUtil.serialize(message));
+        log.debug("Request dh {}", request);
+        return sendAsyncWithFuture(request, new CallbackFuture());
     }
 
     private Request buildRequest(DataPointMessage message) {

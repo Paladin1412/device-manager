@@ -1,6 +1,7 @@
 package com.baidu.iot.devicecloud.devicemanager.config;
 
 import com.baidu.iot.devicecloud.devicemanager.handler.http.AliveHandler;
+import com.baidu.iot.devicecloud.devicemanager.handler.http.DlpHandler;
 import com.baidu.iot.devicecloud.devicemanager.handler.http.PushHandler;
 import com.baidu.iot.devicecloud.devicemanager.handler.http.ReportHandler;
 import org.springframework.context.annotation.Bean;
@@ -28,6 +29,13 @@ public class Endpoints {
     @Bean
     RouterFunction<ServerResponse> pushEndpoints(PushHandler handler) {
         return route(i(POST("/api/v2/push")), handler::deal);
+    }
+
+    @Bean
+    RouterFunction<ServerResponse> dlpEndpoints(DlpHandler handler) {
+        return route(i(POST("/v1/interactive/message")), handler::deal)
+                .andRoute(i(POST("/v1/interactive/online")), handler::dlpStatus)
+                .andRoute(i(POST("/api/v1/dlp/ota/{uuid}")), handler::otaUpgrade);
     }
 
     @Bean

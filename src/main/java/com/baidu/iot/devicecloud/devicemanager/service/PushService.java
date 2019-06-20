@@ -6,7 +6,11 @@ import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.LocalServerInfo;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dhclient.DhClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.redirectclient.RedirectClient;
+import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.LogUtils;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import io.netty.buffer.ByteBufUtil;
@@ -28,9 +32,12 @@ import reactor.util.concurrent.Queues;
 import java.time.Duration;
 import java.util.List;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_NEED;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_SECRET_KEY;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isCoapOk;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponseFromDP;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponsesWithMessage;
 
 /**
@@ -88,7 +95,11 @@ public class PushService implements InitializingBean {
     }
 
     public void unPool(String key) {
+        UnicastProcessor<DataPointMessage> signal = pooledMonoSignals.getIfPresent(key);
         pooledMonoSignals.invalidate(key);
+        if (signal != null) {
+            signal.dispose();
+        }
     }
 
     public void advice(String key, DataPointMessage message) {
@@ -99,7 +110,8 @@ public class PushService implements InitializingBean {
         if (items != null && items.length >= 5) {
             String ip = items[2];
             String port = items[3];
-            if (localServerInfo.getLocalServerIp().equalsIgnoreCase(ip)) {
+            if (localServerInfo.getLocalServerIp().equalsIgnoreCase(ip) &&
+            Integer.toString(LocalServerInfo.localServerPort).equalsIgnoreCase(port)) {
                 UnicastProcessor<DataPointMessage> signal = pooledMonoSignals.getIfPresent(key);
                 if (signal != null && !signal.isDisposed()) {
                     signal.onNext(message);
@@ -140,12 +152,41 @@ public class PushService implements InitializingBean {
         return Mono.just(failedResponses.apply(message.getLogId(), "Pushing dh failed"));
     }
 
+    public void justPush(DataPointMessage message) {
+        this.client.pushMessageAsync(message)
+                .handleAsync(
+                        (r, t) -> {
+                            try(ResponseBody body = r.body()) {
+                                if (log.isDebugEnabled() && r.isSuccessful() && body != null) {
+                                    log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(body.bytes())));
+                                }
+                            } catch (Exception e) {
+                                log.error("Pushing dh failed", e);
+                            }
+                            return null;
+                        }
+                );
+    }
+
+    public void needAckPush(DataPointMessage assembled) {
+        if (assembled != null && StringUtils.hasText(assembled.getCltId()) && StringUtils.hasText(assembled.getDeviceId())) {
+            assembled.setNeedAck(true);
+            String key = pool(assembled);
+            assembled.setKey(key);
+            ObjectNode misc = JsonUtil.createObjectNode();
+            misc.set(MESSAGE_ACK_NEED, BooleanNode.getTrue());
+            misc.set(MESSAGE_ACK_SECRET_KEY, TextNode.valueOf(key));
+            assembled.setMisc(misc.toString());
+            justPush(assembled);
+        }
+    }
+
     public Mono<BaseResponse> check(BaseMessage message, String key, List<Integer> stub) {
         if (message == null || !message.isNeedAck() || stub == null || stub.size() < 1) {
             return Mono.just(successResponsesWithMessage.apply(message));
         }
         UnicastProcessor<DataPointMessage> signal = pooledMonoSignals.getIfPresent(key);
-        if (signal == null) {
+        if (signal == null || signal.isDisposed()) {
             return Mono.just(failedResponses.apply(message.getLogId(), "No signal"));
         }
 
@@ -159,7 +200,7 @@ public class PushService implements InitializingBean {
                         stub.removeIf(i -> i == id);
                     }
                     if (stub.isEmpty()) {
-                        sink.success(successResponsesWithMessage.apply(message));
+                        sink.success(successResponseFromDP.apply(message.getLogId(), ack));
                         signal.cancel();
                     }
                 }

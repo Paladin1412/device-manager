@@ -4,7 +4,7 @@ import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.LocalServerInfo;
-import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
+import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
 import com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
@@ -15,7 +15,10 @@ import okhttp3.ResponseBody;
 import org.springframework.http.MediaType;
 import org.springframework.lang.Nullable;
 import org.springframework.util.StringUtils;
+import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.server.ServerRequest;
+import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.util.List;
@@ -27,7 +30,6 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS;
@@ -105,6 +107,13 @@ public class HttpUtil {
     public static BiFunction<String, String, BaseResponse> successResponse =
             (String logId, String message) -> baseResponse(MESSAGE_SUCCESS_CODE, message, logId);
 
+    public static BiFunction<String, DataPointMessage, BaseResponse> successResponseFromDP =
+            (String logId, DataPointMessage message) -> {
+                BaseResponse baseResponse = baseResponse(MESSAGE_SUCCESS_CODE, null, logId);
+                baseResponse.setData(message.getPayload());
+                return baseResponse;
+            };
+
     public static Function<String, BaseResponse> successResponses =
             logId -> baseResponse(MESSAGE_SUCCESS_CODE, MESSAGE_SUCCESS, logId);
 
@@ -135,6 +144,9 @@ public class HttpUtil {
                 }
                 return response;
             };
+
+    public static Supplier<Function<String, Mono<ServerResponse>>> deviceMayNotOnline =
+            () -> uuid -> ServerResponse.badRequest().body(BodyInserters.fromObject(failedResponses.apply(null, String.format("This device may not online: %s", uuid))));
 
     public static Supplier<BiFunction<Integer, String, DataPointMessage>> failedDataPointResponses =
             () -> parseErrorDataPointMessage;
@@ -210,20 +222,24 @@ public class HttpUtil {
                 .del(CommonConstant.SESSION_KEY_PREFIX + cuid);
     }
 
-    public static boolean projectExist(final String cuid) {
-        int projectId = IdGenerator.projectId(cuid);
+    public static boolean deviceExist(final String cuid) {
         return DproxyClientProvider
                 .getInstance()
-                .exists(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectId);
+                .exists(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid);
     }
 
     @Nullable
-    public static ProjectInfo getProjectInfoFromRedis(final String cuid) {
-        int projectId = IdGenerator.projectId(cuid);
+    public static DeviceResource getDeviceInfoFromRedis(final String cuid) {
         return DproxyClientProvider
                 .getInstance()
-                .hget(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectId,
-                        CommonConstant.PROJECT_INFO, ProjectInfo.class);
+                .hget(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid,
+                        CommonConstant.DEVICE_INFO, DeviceResource.class);
+    }
+
+    public static void deleteDeviceResourceFromRedis(final String cuid) {
+        DproxyClientProvider
+                .getInstance()
+                .del(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid);
     }
 
     /**

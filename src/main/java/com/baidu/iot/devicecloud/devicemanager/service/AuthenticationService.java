@@ -9,6 +9,7 @@ import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dcsclient.DcsProxyClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.DeviceIamClient;
+import com.baidu.iot.devicecloud.devicemanager.client.http.dlpclient.builder.PrivateDlpBuilder;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant;
@@ -45,6 +46,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DLP_DEVICE_ONLINE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_DATA;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_ALIVE_INTERVAL;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_PRIVATE_ERROR;
@@ -52,7 +54,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_STATUS;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedDataPointResponses;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.projectExist;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deviceExist;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/19.
@@ -67,14 +69,15 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
     private final DeviceIamClient client;
     private final DcsProxyClient dcsProxyClient;
     private final AccessTokenService accessTokenService;
+    private final DlpService dlpService;
     private final LocalServerInfo localServerInfo;
 
     private ExecutorService commonSideExecutor;
 
     // project info are almost immutable
     // 14 * 24 * 60 * 60 = 1209600
-    @Value("${expire.resource.project: 1209600}")
-    private long projectResourceExpire;
+    @Value("${expire.resource.device: 1209600}")
+    private long deviceResourceExpire;
 
     @Value("${heartbeat.between.device.dh: 60}")
     private int aliveInterval;
@@ -83,10 +86,11 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
     public AuthenticationService(DeviceIamClient client,
                                  DcsProxyClient dcsProxyClient,
                                  AccessTokenService accessTokenService,
-                                 LocalServerInfo localServerInfo) {
+                                 DlpService dlpService, LocalServerInfo localServerInfo) {
         this.client = client;
         this.dcsProxyClient = dcsProxyClient;
         this.accessTokenService = accessTokenService;
+        this.dlpService = dlpService;
         this.localServerInfo = localServerInfo;
 
         authCache = CacheBuilder.newBuilder()
@@ -115,7 +119,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
 
         return Mono.from(Mono.justOrEmpty(auth(msg))
                 .filter(deviceResource -> deviceResource != null && StringUtils.hasText(deviceResource.getAccessToken()))
-                .doOnNext(this::writeProjectInfoToDproxy)
+                .doOnNext(this::write2Dproxy)
                 .flatMap(deviceResource ->
                         Mono.fromFuture(informDcsProxyAsync(deviceResource, msg).handleAsync(
                                 (response, throwable) -> {
@@ -125,6 +129,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                                             log.debug("Dcs responses: {}", jsonNode.toString());
                                             if (jsonNode.path(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE) {
                                                 assignAddr(response, deviceResource);
+                                                dlpService.forceSendToDlp(message.getDeviceId(), new PrivateDlpBuilder(DLP_DEVICE_ONLINE).getData());
                                                 return successResponses.get();
                                             } else {
                                                 ArrayNode data = (ArrayNode)jsonNode.path(JSON_KEY_DATA);
@@ -167,10 +172,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
             return authCache.get(key, () -> {
                 DeviceResource dr = client.auth(message);
                 if (dr != null && StringUtils.hasText(dr.getAccessToken())) {
-                    accessTokenService.cacheAccessToken(
-                            Optional.ofNullable(cuid).orElse(uuid),
-                            dr.getAccessToken()
-                    );
+                    dr.setCltId(message.getCltId());
                     return Optional.of(dr);
                 }
                 return Optional.empty();
@@ -186,21 +188,24 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                 deviceResource.getAccessToken(), DCSProxyConstant.USER_STATE_CONNECTED);
     }
 
-    private void writeProjectInfoToDproxy(DeviceResource deviceResource) {
+    private void write2Dproxy(DeviceResource deviceResource) {
         commonSideExecutor.submit(() -> {
-                    if (projectExist(deviceResource.getCuid())) {
-                        return;
-                    }
-                    ProjectInfo projectInfo = deviceResource.getProjectInfo();
-                    if (projectInfo != null
-                            && StringUtils.hasText(projectInfo.getVoiceId())
-                            && StringUtils.hasText(projectInfo.getVoiceKey())) {
-                        DproxyClientProvider
-                                .getInstance()
-                                .hset(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectInfo.getId(),
-                                        projectResourceExpire,
-                                        CommonConstant.PROJECT_INFO,
-                                        deviceResource.getProjectInfo());
+                    String cuid = Optional.ofNullable(deviceResource.getCuid()).orElse(deviceResource.getDeviceUuid());
+                    accessTokenService.cacheAccessToken(
+                            cuid,
+                            deviceResource.getAccessToken()
+                    );
+                    if (!deviceExist(cuid)) {
+                        ProjectInfo projectInfo = deviceResource.getProjectInfo();
+                        if (projectInfo != null
+                                && StringUtils.hasText(projectInfo.getVoiceId())
+                                && StringUtils.hasText(projectInfo.getVoiceKey())) {
+                            DproxyClientProvider
+                                    .getInstance()
+                                    .hset(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid,
+                                            CommonConstant.DEVICE_INFO,
+                                            deviceResource);
+                        }
                     }
                 }
         );

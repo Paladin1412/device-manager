@@ -211,7 +211,7 @@ public class BnsCache {
                 return emptySupplier.get();
             }
             String cmd = String.format(GET_IP_BY_BNS, bns);
-            log.debug("cmd={}", cmd);
+//            log.debug("cmd={}", cmd);
             try {
                 process = run.exec(cmd);
                 InputStream in = process.getInputStream();

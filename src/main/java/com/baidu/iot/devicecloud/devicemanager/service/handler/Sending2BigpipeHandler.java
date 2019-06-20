@@ -6,6 +6,8 @@ import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceMessageType;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
 import com.baidu.iot.devicecloud.devicemanager.client.bigpipe.Sender;
 import com.baidu.iot.devicecloud.devicemanager.client.bigpipe.SenderChannelType;
+import com.baidu.iot.devicecloud.devicemanager.service.DlpService;
+import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +26,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_OTA_EVENT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_PACKAGE_INFO;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getDeviceInfoFromRedis;
+import static com.baidu.iot.devicecloud.devicemanager.util.JsonUtil.assembleToClientUpdateProgress;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/6/7.
@@ -45,10 +48,12 @@ public class Sending2BigpipeHandler extends AbstractLinkableDataPointHandler {
             DATA_POINT_DUER_TRACE_INFO
     );
 
+    private final DlpService dlpService;
     private final Sender sender;
 
     @Autowired
-    public Sending2BigpipeHandler(Sender sender) {
+    public Sending2BigpipeHandler(DlpService dlpService, Sender sender) {
+        this.dlpService = dlpService;
         this.sender = sender;
     }
 
@@ -60,6 +65,10 @@ public class Sending2BigpipeHandler extends AbstractLinkableDataPointHandler {
     @Override
     Mono<Object> work(DataPointMessage message) {
         String path = PathUtil.dropOffPrefix(message.getPath(), SPLITTER_URL);
+        // send ota_event to app
+        if (DATA_POINT_OTA_EVENT.equalsIgnoreCase(path)) {
+            dlpService.sendToDlp(message.getDeviceId(), assembleToClientUpdateProgress(JsonUtil.readTree(message.getPayload())));
+        }
         DeviceBaseMessage baseMessage = assembleMessage(message);
         if (baseMessage != null) {
             sender.send(

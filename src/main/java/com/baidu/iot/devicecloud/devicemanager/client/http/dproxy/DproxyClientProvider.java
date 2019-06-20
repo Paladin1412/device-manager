@@ -211,6 +211,19 @@ public class DproxyClientProvider implements InitializingBean {
         return false;
     }
 
+    public void hset(String key, String hKey, Object value) {
+        try {
+            DproxyRequest request = new DproxyRequest("HSET", prefix + key, hKey, value);
+            DproxyResponse response = getConnection(request);
+            if (response != null && response.getStatus() == 0) {
+                log.debug("hset successfully res={}", response.getRes());
+            }
+        } catch (Exception e) {
+            // pass
+            log.warn("redis hset {} failed", key);
+        }
+    }
+
     public <T> T hget(String key, String hKey, Class<T> type) {
         if (StringUtils.isEmpty(key) || StringUtils.isEmpty(hKey)) {
             return null;
