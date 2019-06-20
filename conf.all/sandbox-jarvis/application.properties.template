@@ -6,6 +6,9 @@ dm.tcp.port=$tcp
 di.bns=unknown_bns_di
 di.api=10.117.139.21:8301
 
+paas.api.url=http://api-iot.baidu-int.com/sandbox/for-api
+dlp.connect.proxy.api=http://api-iot.baidu-int.com/sandbox/for-dp
+
 # dproxy sandbox
 dproxy.bns=baidu-duer-bdrp-proxy-sandbox.nlp.nj03
 dproxy.api=10.194.62.45:8123
@@ -28,3 +31,20 @@ local.server.port=
 local.server.bns=
 
 logging.config=$EM_APP_HOME/conf/logback.xml
+
+#bigpipe cluster
+bigpipe.clustername=bigpipe_bws_cluster
+
+#test url
+bigpipe.zookeeper.url=zk-bigpipe-proxy.dmop.baidu.com:2181
+bigpipe.zookeeper.timeout=20000
+
+# bigpipe pipe
+bigpipe.pipename=iotpaas-bws-pipe
+bigpipe.username=iotpaas
+bigpipe.password=iotpaaspwd
+
+# pipelet writers map & init pipelet writers
+bigpipe.msg.pipelet.map=USER:5|DATA:4|HEARTBEAT:4|DEFAULT:4
+# init max writers per pipe
+bigpipe.client.number.per.pipe=20

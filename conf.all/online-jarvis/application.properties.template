@@ -6,6 +6,9 @@ di.api=
 di.url=http://api-iot.baidu-int.com/for-di
 #di.url=http://127.0.0.1:8998
 
+paas.api.url=http://api-iot.baidu-int.com/for-api
+dlp.connect.proxy.api=http://api-iot.baidu-int.com/for-orp-dp
+
 # dproxy online
 dproxy.bns=group.smartbns-from_product=dumi-bdrp-proxy@group.flow-bdrpproxy.dumi.all:main
 dproxy.api=
@@ -28,3 +31,20 @@ local.server.port=
 local.server.bns=
 
 logging.config=$EM_APP_HOME/conf/logback.xml
+
+#bigpipe cluster
+bigpipe.clustername=bigpipe_sh_cluster
+
+#test url
+bigpipe.zookeeper.url=sh01-tm-zookeeper.dmop.baidu.com:2181
+bigpipe.zookeeper.timeout=20000
+
+# bigpipe pipe
+bigpipe.pipename=iotpaas-online-pipe
+bigpipe.username=iot-paas-bigpipe
+bigpipe.password=iotpaas@2015
+
+# pipelet writers map & init pipelet writers
+bigpipe.msg.pipelet.map=USER:9,10|DATA:1,2,4,5,6,7,8|HEARTBEAT:1,2,4,5,6,7,8|DEFAULT:1,2,4,5,6,7,8
+# init max writers per pipe
+bigpipe.client.number.per.pipe=30
