@@ -1,5 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.bean.device;
 
+import com.baidu.iot.devicecloud.devicemanager.bean.CodeEnum;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
