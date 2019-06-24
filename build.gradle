@@ -33,7 +33,7 @@ dependencies {
 	compile group: 'commons-fileupload', name: 'commons-fileupload', version: '1.4'
 	// https://mvnrepository.com/artifact/commons-codec/commons-codec
 	compile group: 'commons-codec', name: 'commons-codec', version: '1.12'
-//	compile rootProject.fileTree(dir: rootProject.libDir, include: '*.jar')
+	compile rootProject.fileTree(dir: rootProject.libDir, include: '*.jar')
 
 	compileOnly 'org.projectlombok:lombok'
 //	runtimeOnly 'org.springframework.boot:spring-boot-devtools'

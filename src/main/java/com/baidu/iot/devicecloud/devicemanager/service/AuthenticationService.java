@@ -18,6 +18,9 @@ import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.LogUtils;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
+import com.baidu.iot.log.Log;
+import com.baidu.iot.log.LogProvider;
+import com.baidu.iot.log.Stopwatch;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.google.common.cache.Cache;
@@ -26,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.HttpUrl;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -64,6 +69,9 @@ import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deviceExist;
 @Slf4j
 @Component
 public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMessage> {
+    private static final Logger infoLog = LoggerFactory.getLogger("infoLog");
+    private static final LogProvider logProvider = LogProvider.getInstance();
+
     private Cache<String, Optional<DeviceResource>> authCache;
 
     private final DeviceIamClient client;
@@ -117,41 +125,51 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
         // update bns
         msg.setBns(localServerInfo.toString());
 
+        Log spanLog = logProvider.get(message.getLogId());
+        spanLog.setCuId(message.getDeviceId());
+        infoLog.info(spanLog.format(String.format("[AUTH] Authoring:%s", String.valueOf(msg))));
+
         return Mono.from(Mono.justOrEmpty(auth(msg))
                 .filter(deviceResource -> deviceResource != null && StringUtils.hasText(deviceResource.getAccessToken()))
                 .doOnNext(this::write2Dproxy)
-                .flatMap(deviceResource ->
-                        Mono.fromFuture(informDcsProxyAsync(deviceResource, msg).handleAsync(
-                                (response, throwable) -> {
-                                    try(ResponseBody body = response.body()) {
-                                        if (response.isSuccessful() && body != null) {
-                                            JsonNode jsonNode = JsonUtil.readTree(body.bytes());
-                                            log.debug("Dcs responses: {}", jsonNode.toString());
-                                            if (jsonNode.path(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE) {
-                                                assignAddr(response, deviceResource);
-                                                dlpService.forceSendToDlp(message.getDeviceId(), new PrivateDlpBuilder(DLP_DEVICE_ONLINE).getData());
-                                                return successResponses.get();
-                                            } else {
-                                                ArrayNode data = (ArrayNode)jsonNode.path(JSON_KEY_DATA);
-                                                if (data != null && data.size() > 0) {
-                                                    DataPointMessage failed = new DataPointMessage();
-                                                    failed.setVersion(DEFAULT_VERSION);
-                                                    failed.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED);
-                                                    failed.setId(IdGenerator.nextId());
-                                                    failed.setPath(PathUtil.lookAfterPrefix(DATA_POINT_PRIVATE_ERROR));
-                                                    failed.setPayload(data.get(0).toString());
-                                                    return failed;
-                                                }
+                .flatMap(deviceResource -> {
+                    Stopwatch dcsStopwatch = spanLog.time("dcs");
+                    return Mono.fromFuture(informDcsProxyAsync(deviceResource, msg).handleAsync(
+                            (response, throwable) -> {
+                                try(ResponseBody body = response.body()) {
+                                    dcsStopwatch.pause();
+                                    infoLog.info(spanLog.format("[AUTH] Informed dcs"));
+                                    if (response.isSuccessful() && body != null) {
+                                        JsonNode jsonNode = JsonUtil.readTree(body.bytes());
+                                        log.debug("Dcs responses: {}", jsonNode.toString());
+                                        infoLog.info(spanLog.format(String.format("[AUTH] Dcs responses:%s", jsonNode.toString())));
+                                        if (jsonNode.path(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE) {
+                                            assignAddr(response, deviceResource);
+                                            dlpService.forceSendToDlp(message.getDeviceId(), new PrivateDlpBuilder(DLP_DEVICE_ONLINE).getData());
+                                            return successResponses.get();
+                                        } else {
+                                            ArrayNode data = (ArrayNode)jsonNode.path(JSON_KEY_DATA);
+                                            if (data != null && data.size() > 0) {
+                                                DataPointMessage failed = new DataPointMessage();
+                                                failed.setVersion(DEFAULT_VERSION);
+                                                failed.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED);
+                                                failed.setId(IdGenerator.nextId());
+                                                failed.setPath(PathUtil.lookAfterPrefix(DATA_POINT_PRIVATE_ERROR));
+                                                failed.setPayload(data.get(0).toString());
+                                                return failed;
                                             }
                                         }
-                                    } catch (Exception e){
-                                        log.error("Checking if the dcs response ok failed", e);
-                                    } finally {
-                                        close(response);
                                     }
-                                    return null;
+                                } catch (Exception e){
+                                    log.error("Checking if the dcs response ok failed", e);
+                                } finally {
+                                    close(response);
                                 }
-                        )))
+                                return null;
+                            }
+                    ));
+                }
+                )
                 .onErrorResume(Mono::error)
                 .switchIfEmpty(
                         Mono.defer(() ->
@@ -160,7 +178,9 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                                                 .apply(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNAUTHORIZED, null)
                                 )
                         )
-                ));
+                )
+                .doFinally(signalType -> logProvider.revoke(message.getLogId()))
+        );
     }
 
     private Optional<DeviceResource> auth(final AuthorizationMessage message) {
@@ -170,7 +190,12 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
 
         try {
             return authCache.get(key, () -> {
+                Log spanLog = logProvider.get(message.getLogId());
+                spanLog.setCuId(message.getDeviceId());
+                Stopwatch stopwatch = spanLog.time("di");
                 DeviceResource dr = client.auth(message);
+                stopwatch.pause();
+                infoLog.info(spanLog.format(String.format("[AUTH] Read authorization info:%s", String.valueOf(dr))));
                 if (dr != null && StringUtils.hasText(dr.getAccessToken())) {
                     dr.setCltId(message.getCltId());
                     return Optional.of(dr);

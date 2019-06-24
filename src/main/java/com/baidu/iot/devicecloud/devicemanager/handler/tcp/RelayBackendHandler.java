@@ -7,14 +7,19 @@ import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
 import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.NettyUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.TlvUtil;
+import com.baidu.iot.log.Log;
+import com.baidu.iot.log.Stopwatch;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.UnicastProcessor;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.concurrent.Queues;
 
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
@@ -33,10 +38,14 @@ import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isDownstreamI
  */
 @Slf4j
 public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage> {
+    private static final Logger infoLog = LoggerFactory.getLogger("infoLog");
+
     private final Channel downstreamChannel;
     private final UnicastProcessor<TlvMessage> downstreamWorkQueue;
     private final UnicastProcessor<TlvMessage> workQueue;
     private final DirectiveProcessor processor;
+    private final Log spanLog;
+    private Stopwatch stopwatch;
 
     private String cuid = null;
     private String sn = null;
@@ -49,13 +58,16 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
 
     RelayBackendHandler(Channel downstreamChannel,
                         UnicastProcessor<TlvMessage> downstreamWorkQueue,
-                        TtsService ttsService) {
+                        TtsService ttsService,
+                        Log spanLog) {
         // auto release the received data
         super();
 
         this.downstreamChannel = downstreamChannel;
         this.downstreamWorkQueue = downstreamWorkQueue;
         this.processor = new DirectiveProcessor(ttsService);
+        this.spanLog = spanLog;
+        this.stopwatch = this.spanLog.time("dcs").stop();
         this.workQueue =
                 UnicastProcessor.create(Queues.<TlvMessage>xs().get());
     }
@@ -67,6 +79,10 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
                 upstreamChannel, msg);
         if (isDownstreamInitPackage(msg)) {
             initialPackageHasArrived = true;
+            this.stopwatch.start();
+            spanLog.count("dcs");
+            infoLog.info("[ASR] Dcs started to response");
+            infoLog.info("[ASR] The asr-link relay server inner channel {} has read a message:{}", upstreamChannel, msg);
             if (confirmedConnection(msg)) {
                 upstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMED);
                 log.debug("{} has been confirmed by dcs. Subscribing to dcs", upstreamChannel.toString());
@@ -76,6 +92,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
                 log.debug("{} has been confirmed by dm. Subscribing to asr", upstreamChannel.toString());
 
                 workQueue
+                        .publishOn(Schedulers.single())
                         .groupBy(TlvUtil::isDownstreamFinishPackage)
                         .flatMapSequential(group -> {
                             if (Boolean.valueOf(String.valueOf(group.key()))) {
@@ -122,10 +139,13 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
 
         if (initialPackageHasArrived) {
             workQueue.onNext(msg);
+            spanLog.count("dcs");
+            infoLog.info("[ASR] The asr-link relay server inner channel {} has read a message:{}", upstreamChannel, msg);
 
             if (isDownstreamFinishPackage(msg)) {
                 log.debug("The downstream finish package(0xF004) has come, completing the work queue");
                 workQueue.onComplete();
+                infoLog.info(spanLog.format("[ASR] Dcs finished to response."));
             }
             return;
         }

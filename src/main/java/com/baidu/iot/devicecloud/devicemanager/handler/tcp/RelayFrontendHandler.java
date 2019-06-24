@@ -10,6 +10,9 @@ import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.service.AccessTokenService;
 import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
+import com.baidu.iot.log.Log;
+import com.baidu.iot.log.LogProvider;
+import com.baidu.iot.log.Stopwatch;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
 import com.fasterxml.jackson.databind.node.IntNode;
@@ -27,6 +30,8 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.UnicastProcessor;
@@ -57,6 +62,8 @@ import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isUpstreamIni
  */
 @Slf4j
 public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage> {
+    private static final Logger infoLog = LoggerFactory.getLogger("infoLog");
+    private static final LogProvider logProvider = LogProvider.getInstance();
     /**
      * Whether the connected clients, like asr, report the initial package with type {@link TlvConstant#TYPE_UPSTREAM_INIT}
      */
@@ -73,6 +80,9 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
     private String cuid;
     private String sn;
 
+    private Log spanLog;
+    private Stopwatch stopwatch;
+
     public RelayFrontendHandler(AccessTokenService accessTokenService,
                                 TtsService ttsService,
                                 InetSocketAddress assignedAsrAddress,
@@ -86,6 +96,9 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
         // here shouldn't be so many messages, so use xs().
         this.workQueue =
                 UnicastProcessor.create(Queues.<TlvMessage>xs().get());
+
+        this.spanLog = logProvider.get();
+        this.stopwatch = spanLog.time("asr").stop();
     }
 
     @Override
@@ -104,6 +117,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
         // everything arrived before the first initial package will be ignored
         if (!initialPackageHasArrived && isUpstreamInitPackage(msg)) {
             initialPackageHasArrived = true;
+
             // 0x0001 showed up for the first time, initialize a new connection to DCS proxy
             // change the channel's confirmation state
             inboundChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.CONFIRMING);
@@ -114,6 +128,13 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                 this.cuid = paramNode.path(JSON_KEY_DUEROS_DEVICE_ID).asText();
                 this.sn = valueNode.path(JSON_KEY_SN).asText();
             }
+
+            spanLog.setCuId(cuid);
+            spanLog.setLogId(sn);
+            infoLog.info("[ASR] Asr started");
+            stopwatch.start();
+            spanLog.count("asr");
+            infoLog.info("[ASR] The asr-link relay channel {} has read a message:{}", inboundChannel, msg);
 
             // Initializing a new connection to DCS proxy for each client connected to the relay server til the client has report the first initial package
             Bootstrap dcsProxyClient = new Bootstrap();
@@ -127,7 +148,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                                     // Inbounds start from below
                                     .addLast("tlvDecoder", new TlvDecoder())
                                     .addLast("idleStateHandler", new IdleStateHandler(config.dmTcpTimeoutIdle, config.dmTcpTimeoutIdle, 0))
-                                    .addLast(new RelayBackendHandler(inboundChannel, workQueue, ttsService))
+                                    .addLast(new RelayBackendHandler(inboundChannel, workQueue, ttsService, spanLog))
                                     // Inbounds stop at above
 
                                     // Outbounds stop at below
@@ -171,10 +192,14 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
         if (initialPackageHasArrived) {
             log.debug("The upstream init package(0x0001) has already showed up, the message would join the work queue");
             workQueue.onNext(msg);
+            spanLog.count("asr");
+            infoLog.info("[ASR] The asr-link relay channel {} has read a message:{}", inboundChannel, msg);
 
             if (isUpstreamFinishPackage(msg)) {
                 log.debug("The upstream finish package(0x0004) has come, completing the work queue");
                 workQueue.onComplete();
+                stopwatch.pause();
+                infoLog.info(spanLog.format("[ASR] Asr finished."));
             }
             return;
         }

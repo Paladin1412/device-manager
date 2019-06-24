@@ -25,6 +25,7 @@ import org.springframework.web.reactive.function.BodyExtractors;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -172,7 +173,8 @@ public class DlpHandler {
             DataPointMessage assembled = Adapter.directive2DataPoint(directive, DATA_POINT_DUER_PRIVATE, null);
             assembled.setCltId(cltId);
             assembled.setDeviceId(deviceUuid);
-            pushService.needAckPush(assembled);
+            assembled.setLogId(messageId);
+            pushService.prepareAckPush(assembled);
             String key = assembled.getKey();
 
             JsonNode dialogueFinished = assembleDuerPrivateDirective(
@@ -183,20 +185,31 @@ public class DlpHandler {
             DataPointMessage assembled1 = Adapter.directive2DataPoint(dialogueFinished, DATA_POINT_DUER_DIRECTIVE, null);
             assembled1.setCltId(cltId);
             assembled1.setDeviceId(deviceUuid);
-            pushService.justPush(assembled1);
-            return pushService
-                    .check(assembled, key, Collections.singletonList(assembled.getId()))
-                    .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(key, String.format("Waiting ack timeout. key:%s", key))))
-                    .flatMap(baseResponse -> {
-                        if (baseResponse.getCode() == MESSAGE_SUCCESS_CODE) {
-                            dlpService.sendToDlp(deviceUuid, new PrivateDlpBuilder(DLP_DEVICE_ONLINE).getData());
-                            dlpService.forceSendToDlp(deviceUuid,
-                                    JsonUtil.readTree(baseResponse.getData()));
-                            return ServerResponse.noContent().build();
+            assembled1.setLogId(messageId);
+            return Mono.from(
+                    Flux.just(assembled, assembled1)
+                    .flatMapSequential(pushService::push)
+                    .take(1)
+                    .flatMap(response -> {
+                        if (response.getCode() == MESSAGE_SUCCESS_CODE) {
+                            return pushService
+                                    .check(assembled, key, Collections.singletonList(assembled.getId()))
+                                    .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(key, String.format("Waiting ack timeout. key:%s", key))))
+                                    .flatMap(baseResponse -> {
+                                        if (baseResponse.getCode() == MESSAGE_SUCCESS_CODE) {
+                                            dlpService.sendToDlp(deviceUuid, new PrivateDlpBuilder(DLP_DEVICE_ONLINE).getData());
+                                            dlpService.forceSendToDlp(deviceUuid,
+                                                    JsonUtil.readTree(baseResponse.getData()));
+                                            return ServerResponse.noContent().build();
+                                        }
+                                        return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(BodyInserters.fromObject(baseResponse));
+                                    });
+                        } else {
+                            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(BodyInserters.fromObject(response));
                         }
-                        return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(BodyInserters.fromObject(baseResponse));
-                    });
-
+                    })
+                            .doFinally(signalType -> pushService.unPool(key))
+            );
         }
         return deviceMayNotOnline.get().apply(deviceUuid);
     }

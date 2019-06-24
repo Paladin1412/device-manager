@@ -8,6 +8,10 @@ import com.baidu.iot.devicecloud.devicemanager.client.http.dhclient.DhClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.redirectclient.RedirectClient;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.LogUtils;
+import com.baidu.iot.log.Log;
+import com.baidu.iot.log.LogProvider;
+import com.baidu.iot.log.Stopwatch;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.BooleanNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -16,8 +20,9 @@ import com.google.common.cache.CacheBuilder;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.Response;
 import okhttp3.ResponseBody;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,9 +39,11 @@ import java.util.List;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_NEED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_SECRET_KEY;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isCoapOk;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponse;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponseFromDP;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponsesWithMessage;
 
@@ -48,6 +55,9 @@ import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successRespo
 @Slf4j
 @Component
 public class PushService implements InitializingBean {
+    private static final Logger infoLog = LoggerFactory.getLogger("infoLog");
+    private static final LogProvider logProvider = LogProvider.getInstance();
+
     private final DhClient client;
     private final RedirectClient redirectClient;
     private final SecurityService securityService;
@@ -134,22 +144,42 @@ public class PushService implements InitializingBean {
     }
 
     public Mono<BaseResponse> push(DataPointMessage message) {
-        //noinspection BlockingMethodInNonBlockingContext
-        try(Response response = this.client.pushMessage(message)) {
-            if (response != null && response.isSuccessful()) {
-                if (log.isDebugEnabled()) {
-                    ResponseBody body = response.body();
-                    if (body != null) {
-                        //noinspection BlockingMethodInNonBlockingContext
-                        log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(body.bytes())));
-                    }
-                }
-                return Mono.just(successResponsesWithMessage.apply(message));
-            }
-        } catch (Exception e) {
-            log.error("Pushing dh failed", e);
-        }
-        return Mono.just(failedResponses.apply(message.getLogId(), "Pushing dh failed"));
+        Log spanLog = logProvider.get(message.getLogId());
+        spanLog.setCuId(message.getDeviceId());
+        Stopwatch stopwatch = spanLog.time("dh2");
+        String logId = spanLog.getLogId();
+        return Mono.fromFuture(
+                this.client.pushMessageAsync(message)
+                .handleAsync(
+                        (r, t) -> {
+                            stopwatch.pause();
+                            try(ResponseBody body = r.body()) {
+                                if (body != null) {
+                                    byte[] bytes = body.bytes();
+                                    log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(bytes)));
+
+                                    JsonNode bodyNode = JsonUtil.readTree(bytes);
+                                    infoLog.info(spanLog.format(String.format("DH response:%s", bodyNode.toString())));
+                                    if (!bodyNode.isNull()) {
+                                        int err_no = bodyNode.path("err_no").asInt(-1);
+                                        String err_msg = bodyNode.path("error").asText("");
+                                        if (err_no == MESSAGE_SUCCESS_CODE) {
+                                            return successResponse.apply(logId, err_msg);
+                                        } else {
+                                            failedResponses.apply(logId, err_msg);
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                log.error("Pushing dh failed", e);
+                                return failedResponses.apply(logId, e.getMessage());
+                            } finally {
+                                logProvider.revoke(logId);
+                            }
+                            return failedResponses.apply(logId, "Pushing dh failed");
+                        }
+                )
+        );
     }
 
     public void justPush(DataPointMessage message) {
@@ -168,7 +198,7 @@ public class PushService implements InitializingBean {
                 );
     }
 
-    public void needAckPush(DataPointMessage assembled) {
+    public void prepareAckPush(DataPointMessage assembled) {
         if (assembled != null && StringUtils.hasText(assembled.getCltId()) && StringUtils.hasText(assembled.getDeviceId())) {
             assembled.setNeedAck(true);
             String key = pool(assembled);
@@ -177,7 +207,6 @@ public class PushService implements InitializingBean {
             misc.set(MESSAGE_ACK_NEED, BooleanNode.getTrue());
             misc.set(MESSAGE_ACK_SECRET_KEY, TextNode.valueOf(key));
             assembled.setMisc(misc.toString());
-            justPush(assembled);
         }
     }
 

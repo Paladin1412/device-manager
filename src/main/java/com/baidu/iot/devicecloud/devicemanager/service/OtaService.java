@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_LF;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_SPACE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_DIALOG_ID;
@@ -116,14 +117,22 @@ public class OtaService {
                 DataPointMessage assembled = Adapter.directive2DataPoint(directive, DATA_POINT_DUER_DLP, null);
                 assembled.setCltId(deviceResource.getCltId());
                 assembled.setDeviceId(uuid);
-                pushService.needAckPush(assembled);
+                pushService.prepareAckPush(assembled);
                 String key = assembled.getKey();
 
                 log.info("Pushed ota update directive to device {}, key:{}", message.getUuid(), key);
-                return pushService
-                        .check(assembled, key, Collections.singletonList(assembled.getId()))
-                        .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(key, String.format("Waiting ack timeout. key:%s", key))))
-                        .flatMap(baseResponse -> ServerResponse.ok().body(BodyInserters.fromObject(baseResponse)));
+                return pushService.push(assembled)
+                        .flatMap(response -> {
+                            if (response.getCode() == MESSAGE_SUCCESS_CODE) {
+                                return pushService
+                                        .check(assembled, key, Collections.singletonList(assembled.getId()))
+                                        .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(key, String.format("Waiting ack timeout. key:%s", key))))
+                                        .flatMap(baseResponse -> ServerResponse.ok().body(BodyInserters.fromObject(baseResponse)));
+                            } else {
+                                return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(BodyInserters.fromObject(response));
+                            }
+                        })
+                        .doFinally(signalType -> pushService.unPool(key));
             }
             return deviceMayNotOnline.get().apply(uuid);
         }
