@@ -2,13 +2,18 @@ package com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient;
 
 
 import com.baidu.iot.devicecloud.devicemanager.bean.AuthorizationMessage;
+import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
 import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.AbstractHttpClient;
+import com.baidu.iot.devicecloud.devicemanager.client.http.callback.CallbackFuture;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.bean.AccessTokenRequest;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Request;
@@ -32,8 +37,10 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_BIND_UTOKEN;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/19.
@@ -46,6 +53,7 @@ public class DeviceIamClient extends AbstractHttpClient {
     private static final String DEVICE_IAM_API_VERSION = "v1";
     private static final String[] DEVICE_AUTH_PATH = {"auth"};
     private static final String[] DEVICE_ACCESS_TOKEN_PATH = {"device", "accessToken"};
+    private static final String[] DEVICE_BIND_UTOKEN_PATH = {"utoken", "bind"};
 
     // 14 * 24 * 60 * 60 = 1209600
     @Value("${expire.token.access: 300}")
@@ -82,6 +90,12 @@ public class DeviceIamClient extends AbstractHttpClient {
         }
 
         return null;
+    }
+
+    public CompletableFuture<Response> bindUToken(DataPointMessage message) {
+        Request request = buildRequest(message);
+        Assert.notNull(request, "Binding utoken Request is null");
+        return sendAsyncWithFuture(request, new CallbackFuture());
     }
 
     @Retryable(value = {SocketTimeoutException.class}, backoff = @Backoff(200))
@@ -172,6 +186,25 @@ public class DeviceIamClient extends AbstractHttpClient {
         }
 
         return requestBuilder.build();
+    }
+
+    private Request buildRequest(DataPointMessage message) {
+        JsonNode uTokenNode = JsonUtil.readTree(message.getPayload());
+        if (uTokenNode.has(DATA_POINT_DUER_BIND_UTOKEN)) {
+            return null;
+        }
+        ObjectNode bodyNode = JsonUtil.createObjectNode();
+        bodyNode.set("deviceUuid", TextNode.valueOf(message.getDeviceId()));
+        bodyNode.set("uToken", uTokenNode.path(DATA_POINT_DUER_BIND_UTOKEN));
+        RequestBody requestBody = buildRequestBody(bodyNode);
+        if (requestBody == null) {
+            return null;
+        }
+        return new Request.Builder()
+                .url(getFullPath(DeviceIamClient.DEVICE_BIND_UTOKEN_PATH))
+                .header(HttpHeaders.CONTENT_TYPE, org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
+                .post(requestBody)
+                .build();
     }
 
     private String getFullPath(String[] path) {

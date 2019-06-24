@@ -120,6 +120,9 @@ public class DCSProxyConstant {
 
     public static String DIRECTIVE_NAMESPACE_PREFIX = "ai.dueros.device_interface";
     public static String DLP_DCS_NAMESPACE_PREFIX = DIRECTIVE_NAMESPACE_PREFIX + ".";
+
+    public static final String PRIVATE_BIND_NAMESPACE = DLP_DCS_NAMESPACE_PREFIX + "iot_cloud.bind";
+
     public static String AUDIO_PLAYER_NAMESPACE = DLP_DCS_NAMESPACE_PREFIX + "audio_player";
     public static List AUDIO_PLAYER_STUTTER_NAME = Arrays.asList(
             "PlaybackStutterStarted",

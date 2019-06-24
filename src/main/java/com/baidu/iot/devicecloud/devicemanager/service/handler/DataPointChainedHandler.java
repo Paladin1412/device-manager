@@ -21,6 +21,7 @@ public class DataPointChainedHandler implements ReactorDispatcherHandler<DataPoi
 
     @Autowired
     DataPointChainedHandler(DuerEventHandler duerEventHandler,
+                            DuerBindUtokenHandler duerBindUtokenHandler,
                             Sending2BigpipeHandler sending2BigpipeHandler,
                             DiscardHandler discardHandler,
                             DataPointAdviceHandler adviceHandler) {
@@ -28,6 +29,7 @@ public class DataPointChainedHandler implements ReactorDispatcherHandler<DataPoi
         this.requestHandler = duerEventHandler;
         // Link the chain up
         this.requestHandler
+                .linkWith(duerBindUtokenHandler)
                 .linkWith(sending2BigpipeHandler)
                 .linkWith(discardHandler);
 

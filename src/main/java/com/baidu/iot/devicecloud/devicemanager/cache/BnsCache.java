@@ -122,8 +122,8 @@ public class BnsCache {
         return getRandomInetAddress(TTS_PROXY_BNS);
     }
 
-    public static InetSocketAddress getHashedTtsProxyAddress(String cuid, String sn) {
-        return getHashedAddress(TTS_PROXY_BNS, String.format("%s_%s", cuid, sn));
+    public static InetSocketAddress getHashedTtsProxyAddress(String cuid, String cltId) {
+        return getHashedAddress(TTS_PROXY_BNS, String.format("%s_%s", cuid, StringUtils.hasText(cltId) ? cltId : ""));
     }
 
     public static InetSocketAddress getRandomDProxyAddress() {
@@ -187,7 +187,7 @@ public class BnsCache {
     }
 
     private static String getKey(BaseMessage message) {
-        return String.format("%s_%s_%s", message.getDeviceId(), message.getCltId(), message.getSn());
+        return String.format("%s_%s", message.getDeviceId(), message.getCltId());
     }
 
     private static final class BnsCacheLoader extends CacheLoader<String, List<String>> {
