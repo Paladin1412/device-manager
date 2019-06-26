@@ -190,12 +190,12 @@ public class DeviceIamClient extends AbstractHttpClient {
 
     private Request buildRequest(DataPointMessage message) {
         JsonNode uTokenNode = JsonUtil.readTree(message.getPayload());
-        if (!uTokenNode.has(DATA_POINT_DUER_BIND_UTOKEN)) {
+        if (uTokenNode.isObject() && !uTokenNode.has(DATA_POINT_DUER_BIND_UTOKEN)) {
             return null;
         }
         ObjectNode bodyNode = JsonUtil.createObjectNode();
         bodyNode.set("deviceUuid", TextNode.valueOf(message.getDeviceId()));
-        bodyNode.set("uToken", uTokenNode.path(DATA_POINT_DUER_BIND_UTOKEN));
+        bodyNode.set("uToken", uTokenNode.isTextual() ? uTokenNode : uTokenNode.path(DATA_POINT_DUER_BIND_UTOKEN));
         RequestBody requestBody = buildRequestBody(bodyNode);
         if (requestBody == null) {
             return null;
