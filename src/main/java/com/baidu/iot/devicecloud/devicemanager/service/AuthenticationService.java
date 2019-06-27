@@ -5,13 +5,9 @@ import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.LocalServerInfo;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
-import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dcsclient.DcsProxyClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.DeviceIamClient;
-import com.baidu.iot.devicecloud.devicemanager.client.http.dlpclient.builder.PrivateDlpBuilder;
-import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
-import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
 import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
@@ -41,9 +37,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -51,7 +44,6 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
-import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DLP_DEVICE_ONLINE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_DATA;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_ALIVE_INTERVAL;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_PRIVATE_ERROR;
@@ -59,7 +51,6 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_STATUS;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedDataPointResponses;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deviceExist;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/19.
@@ -76,11 +67,8 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
 
     private final DeviceIamClient client;
     private final DcsProxyClient dcsProxyClient;
-    private final AccessTokenService accessTokenService;
-    private final DlpService dlpService;
+    private final DeviceSessionService deviceSessionService;
     private final LocalServerInfo localServerInfo;
-
-    private ExecutorService commonSideExecutor;
 
     // project info are almost immutable
     // 14 * 24 * 60 * 60 = 1209600
@@ -93,12 +81,11 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
     @Autowired
     public AuthenticationService(DeviceIamClient client,
                                  DcsProxyClient dcsProxyClient,
-                                 AccessTokenService accessTokenService,
-                                 DlpService dlpService, LocalServerInfo localServerInfo) {
+                                 DeviceSessionService deviceSessionService,
+                                 LocalServerInfo localServerInfo) {
         this.client = client;
         this.dcsProxyClient = dcsProxyClient;
-        this.accessTokenService = accessTokenService;
-        this.dlpService = dlpService;
+        this.deviceSessionService = deviceSessionService;
         this.localServerInfo = localServerInfo;
 
         authCache = CacheBuilder.newBuilder()
@@ -108,10 +95,6 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                 .maximumSize(1_000_000)
                 .removalListener(LogUtils.REMOVAL_LOGGER.apply(log))
                 .build();
-
-        commonSideExecutor = new ThreadPoolExecutor(0, 50,
-                60L, TimeUnit.SECONDS,
-                new SynchronousQueue<>());
     }
 
     @Override
@@ -131,7 +114,10 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
 
         return Mono.from(Mono.justOrEmpty(auth(msg))
                 .filter(deviceResource -> deviceResource != null && StringUtils.hasText(deviceResource.getAccessToken()))
-                .doOnNext(this::write2Dproxy)
+                .doOnNext(deviceResource -> {
+                    deviceResource.setIp(message.getDeviceIp());
+                    deviceResource.setPort(message.getDevicePort());
+                })
                 .flatMap(deviceResource -> {
                     Stopwatch dcsStopwatch = spanLog.time("dcs");
                     return Mono.fromFuture(informDcsProxyAsync(deviceResource, msg).handleAsync(
@@ -145,7 +131,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                                         infoLog.info(spanLog.format(String.format("[AUTH] Dcs responses:%s", jsonNode.toString())));
                                         if (jsonNode.path(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE) {
                                             assignAddr(response, deviceResource);
-                                            dlpService.forceSendToDlp(message.getDeviceId(), new PrivateDlpBuilder(DLP_DEVICE_ONLINE).getData());
+                                            deviceSessionService.setSession(deviceResource, message.getLogId());
                                             return successResponses.get();
                                         } else {
                                             ArrayNode data = (ArrayNode)jsonNode.path(JSON_KEY_DATA);
@@ -211,29 +197,6 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
     private CompletableFuture<Response> informDcsProxyAsync(DeviceResource deviceResource, BaseMessage message) {
         return dcsProxyClient.adviceUserStateAsync(message,
                 deviceResource.getAccessToken(), DCSProxyConstant.USER_STATE_CONNECTED);
-    }
-
-    private void write2Dproxy(DeviceResource deviceResource) {
-        commonSideExecutor.submit(() -> {
-                    String cuid = Optional.ofNullable(deviceResource.getCuid()).orElse(deviceResource.getDeviceUuid());
-                    accessTokenService.cacheAccessToken(
-                            cuid,
-                            deviceResource.getAccessToken()
-                    );
-                    if (!deviceExist(cuid)) {
-                        ProjectInfo projectInfo = deviceResource.getProjectInfo();
-                        if (projectInfo != null
-                                && StringUtils.hasText(projectInfo.getVoiceId())
-                                && StringUtils.hasText(projectInfo.getVoiceKey())) {
-                            DproxyClientProvider
-                                    .getInstance()
-                                    .hset(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid,
-                                            CommonConstant.DEVICE_INFO,
-                                            deviceResource);
-                        }
-                    }
-                }
-        );
     }
 
     private final Supplier<DataPointMessage> successResponses = () -> {

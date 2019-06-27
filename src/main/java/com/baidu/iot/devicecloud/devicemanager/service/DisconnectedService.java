@@ -4,7 +4,6 @@ import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dcsclient.DcsProxyClient;
-import com.baidu.iot.devicecloud.devicemanager.client.http.dlpclient.builder.PrivateDlpBuilder;
 import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.HttpUrl;
@@ -17,10 +16,8 @@ import reactor.core.publisher.Mono;
 import java.io.IOException;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE_DH2;
-import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DLP_DEVICE_OFFLINE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.USER_STATE_DISCONNECTED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.USER_STATE_EXCEPTION;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deleteDeviceResourceFromRedis;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.dependentResponse;
 
 /**
@@ -33,13 +30,13 @@ import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.dependentRes
 public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMessage> {
     private final DcsProxyClient dcsProxyClient;
     private final AccessTokenService accessTokenService;
-    private final DlpService dlpService;
+    private final DeviceSessionService deviceSessionService;
 
     @Autowired
-    public DisconnectedService(DcsProxyClient dcsProxyClient, AccessTokenService accessTokenService, DlpService dlpService) {
+    public DisconnectedService(DcsProxyClient dcsProxyClient, AccessTokenService accessTokenService, DeviceSessionService deviceSessionService) {
         this.dcsProxyClient = dcsProxyClient;
         this.accessTokenService = accessTokenService;
-        this.dlpService = dlpService;
+        this.deviceSessionService = deviceSessionService;
     }
 
     @Override
@@ -55,10 +52,7 @@ public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMess
         return Mono.create(sink -> {
             try(Response response = informDcsProxy(message,
                     type == MessageType.SYS_DISCONNECTED ? USER_STATE_DISCONNECTED : USER_STATE_EXCEPTION)) {
-                if (response != null) {
-                    releaseResource(response, message);
-                    dlpService.forceSendToDlp(message.getDeviceId(), new PrivateDlpBuilder(DLP_DEVICE_OFFLINE).getData());
-                }
+                releaseResource(response, message);
                 BaseResponse baseResponse = dependentResponse.apply(message, response);
                 baseResponse.setStatus(MESSAGE_SUCCESS_CODE_DH2);
                 sink.success(baseResponse);
@@ -88,8 +82,7 @@ public class DisconnectedService extends AbstractLinkableHandlerAdapter<BaseMess
             log.debug("Releasing the assigned dcs address {}:{} from {}",
                     url.host(), url.port(), deviceId);
             AddressCache.cache.invalidate(AddressCache.getDcsAddressKey(deviceId));
-            accessTokenService.releaseAccessToken(message);
-            deleteDeviceResourceFromRedis(deviceId);
+            deviceSessionService.clearSession(deviceId, message.getLogId());
         } catch (Exception ignore) {
             log.warn("Releasing the assigned dcs address from {} failed", deviceId);
         }

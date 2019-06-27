@@ -47,6 +47,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_P
  */
 @Slf4j
 public class HttpUtil {
+    private static final DproxyClientProvider clientProvider = DproxyClientProvider.getInstance();
     public static void close(Response response) {
         try {
             if (response != null) {
@@ -114,7 +115,7 @@ public class HttpUtil {
                 return baseResponse;
             };
 
-    public static Function<String, BaseResponse> successResponses =
+    private static Function<String, BaseResponse> successResponses =
             logId -> baseResponse(MESSAGE_SUCCESS_CODE, MESSAGE_SUCCESS, logId);
 
     public static BiFunction<String, String, BaseResponse> failedResponses =
@@ -122,15 +123,6 @@ public class HttpUtil {
 
     public static Function<BaseMessage, BaseResponse> successResponsesWithMessage =
             (BaseMessage message) -> successResponses.apply(message != null ? message.getLogId() : null);
-
-    public static Function<Integer, DataPointMessage> defaultDataPointResponses =
-            code -> {
-                DataPointMessage response = new DataPointMessage();
-                response.setVersion(DEFAULT_VERSION);
-                response.setCode(code);
-                response.setId(IdGenerator.nextId());
-                return response;
-            };
 
     private static BiFunction<Integer, String, DataPointMessage> parseErrorDataPointMessage =
             (code, content) -> {
@@ -209,37 +201,54 @@ public class HttpUtil {
         return values.size() > 0 ? values.get(0) : null;
     }
 
+    public static void deviceOnlineStatus(final String cuid, final boolean online) {
+        clientProvider.hset(CommonConstant.SESSION_KEY_PREFIX + cuid, -1, CommonConstant.SESSION_DEVICE_ONLINE_STATUS, online);
+    }
+
+    public static boolean writeTokenToRedis(final String cuid, final String accessToken) {
+        return clientProvider.hset(CommonConstant.SESSION_KEY_PREFIX + cuid, -1, CommonConstant.SESSION_DEVICE_ACCESS_TOKEN, accessToken);
+    }
+
     @Nullable
     public static String getTokenFromRedis(final String cuid) {
-        return DproxyClientProvider
-                .getInstance()
-                .get(CommonConstant.SESSION_KEY_PREFIX + cuid);
+        return Optional.ofNullable(clientProvider
+                .hget(CommonConstant.SESSION_KEY_PREFIX + cuid, CommonConstant.SESSION_DEVICE_ACCESS_TOKEN, String.class))
+                .orElseGet(() -> clientProvider
+                        .get(CommonConstant.SESSION_KEY_PREFIX + cuid));
     }
 
     public static void deleteTokenFromRedis(final String cuid) {
-        DproxyClientProvider
-                .getInstance()
-                .del(CommonConstant.SESSION_KEY_PREFIX + cuid);
+        clientProvider.hdel(CommonConstant.SESSION_KEY_PREFIX + cuid, CommonConstant.SESSION_DEVICE_ACCESS_TOKEN);
+    }
+
+    public static void deleteSessionFromRedis(final String cuid) {
+        clientProvider.del(CommonConstant.SESSION_KEY_PREFIX + cuid);
     }
 
     public static boolean deviceExist(final String cuid) {
-        return DproxyClientProvider
-                .getInstance()
-                .exists(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid);
+        return clientProvider.exists(CommonConstant.SESSION_KEY_PREFIX + cuid, CommonConstant.SESSION_DEVICE_INFO) ||
+                clientProvider.exists(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid);
+    }
+
+    public static void writeDeviceResourceToRedis(DeviceResource deviceResource) {
+        String cuid = Optional.ofNullable(deviceResource.getCuid()).orElse(deviceResource.getDeviceUuid());
+        if (StringUtils.hasText(cuid)) {
+            clientProvider.hset(CommonConstant.SESSION_KEY_PREFIX + cuid,
+                            CommonConstant.SESSION_DEVICE_INFO,
+                            deviceResource);
+        }
     }
 
     @Nullable
     public static DeviceResource getDeviceInfoFromRedis(final String cuid) {
-        return DproxyClientProvider
-                .getInstance()
-                .hget(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid,
-                        CommonConstant.DEVICE_INFO, DeviceResource.class);
+        return Optional.ofNullable(clientProvider
+                .hget(CommonConstant.SESSION_KEY_PREFIX + cuid, CommonConstant.SESSION_DEVICE_INFO, DeviceResource.class))
+                .orElseGet(() -> clientProvider
+                        .hget(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid, CommonConstant.SESSION_DEVICE_INFO, DeviceResource.class));
     }
 
     public static void deleteDeviceResourceFromRedis(final String cuid) {
-        DproxyClientProvider
-                .getInstance()
-                .del(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid);
+        clientProvider.del(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid);
     }
 
     /**
