@@ -1,7 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.service;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.AuthorizationMessage;
-import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.DeviceIamClient;
 import com.baidu.iot.devicecloud.devicemanager.util.HttpUtil;
@@ -18,7 +17,7 @@ import org.springframework.util.StringUtils;
 import java.util.concurrent.TimeUnit;
 
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deleteTokenFromRedis;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getDeviceInfoFromRedis;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getProjectResourceFromRedis;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.writeTokenToRedis;
 
 /**
@@ -75,8 +74,8 @@ public class AccessTokenService {
      * @param cuid the unique device id
      * @param accessToken being obtained after authorized legally
      */
-    void cacheAccessToken(String cuid, String accessToken) {
-        if (StringUtils.hasText(cuid) && StringUtils.hasText(accessToken) && writeTokenToRedis(cuid, accessToken)) {
+    void cacheAccessToken(String cuid, String accessToken, long expire) {
+        if (StringUtils.hasText(cuid) && StringUtils.hasText(accessToken) && writeTokenToRedis(cuid, accessToken, expire)) {
             atCache.put(cuid, accessToken);
         }
     }
@@ -113,19 +112,16 @@ public class AccessTokenService {
         String accessToken = HttpUtil.getTokenFromRedis(cuid);
         if (StringUtils.isEmpty(accessToken)) {
             // try to get project info from redis, which should'v been written into at authorization time.
-            DeviceResource deviceResource = getDeviceInfoFromRedis(cuid);
-            if (deviceResource != null) {
-                ProjectInfo projectInfo = deviceResource.getProjectInfo();
-                if (projectInfo != null
-                        && StringUtils.hasText(projectInfo.getVoiceId())
-                        && StringUtils.hasText(projectInfo.getVoiceKey())) {
-                    String vId = projectInfo.getVoiceId();
-                    String vKey = projectInfo.getVoiceKey();
-                    // try to get access token by using project info
-                    String at = deviceIamClient.getAccessToken(cuid, vId, vKey, logId);
-                    if (StringUtils.hasText(at)) {
-                        writeTokenToRedis(cuid, at);
-                    }
+            ProjectInfo projectInfo = getProjectResourceFromRedis(cuid);
+            if (projectInfo != null
+                    && StringUtils.hasText(projectInfo.getVoiceId())
+                    && StringUtils.hasText(projectInfo.getVoiceKey())) {
+                String vId = projectInfo.getVoiceId();
+                String vKey = projectInfo.getVoiceKey();
+                // try to get access token by using project info
+                String at = deviceIamClient.getAccessToken(cuid, vId, vKey, logId);
+                if (StringUtils.hasText(at)) {
+                    writeTokenToRedis(cuid, at, -1);
                     return at;
                 }
             }

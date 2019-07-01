@@ -38,9 +38,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DLP_DCS_NAMESPACE_PREFIX;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_DCS_EVENT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
-import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.PRIVATE_PROTOCOL_DIALOGUE_FINISHED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.PRIVATE_PROTOCOL_NAMESPACE;
-import static com.baidu.iot.devicecloud.devicemanager.util.DirectiveUtil.assembleDuerPrivateDirective;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isLegalType;
 
 /**
@@ -97,35 +95,6 @@ public class Adapter {
 
     }
 
-    public static List<TlvMessage> directive2DataPointTLV(List<JsonNode> directives, int type) {
-        if (directives == null || directives.size() < 1 || !isLegalType(type)) {
-            return Collections.emptyList();
-        }
-
-        // try to append DialogueFinished
-        try2appendDialogueFinished(directives);
-
-        return directives
-                .stream()
-                .map(
-                        node -> directive2DataPointTLV(node, type)
-                )
-                .collect(Collectors.toList());
-    }
-    public static List<DataPointMessage> directive2DataPoint(List<JsonNode> directives, DataPointMessage origin) {
-        if (directives == null || directives.size() < 1 || origin == null) {
-            return Collections.emptyList();
-        }
-
-        // try to append DialogueFinished
-        try2appendDialogueFinished(directives);
-
-        return directives
-                .stream()
-                .map(node -> directive2DataPoint(node, origin))
-                .collect(Collectors.toList());
-    }
-
     public static DataPointMessage directive2DataPoint(JsonNode directive, DataPointMessage origin) {
         return directive2DataPoint(directive, DataPointConstant.DATA_POINT_DUER_DIRECTIVE, origin);
     }
@@ -144,23 +113,6 @@ public class Adapter {
         return assembled;
     }
 
-    private static void try2appendDialogueFinished(List<JsonNode> directives) {
-        try {
-            // obtain dialogueRequestId from first directive
-            JsonNode first = directives.get(0);
-            JsonNode header = first.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_HEADER);
-            String dialogueRequestId = header.path(DIRECTIVE_KEY_HEADER_DIALOG_ID).asText();
-            directives.add(assembleDuerPrivateDirective(
-                    PRIVATE_PROTOCOL_DIALOGUE_FINISHED,
-                    dialogueRequestId,
-                    header.path(DIRECTIVE_KEY_HEADER_MESSAGE_ID).asText(),
-                    directives.size() + 1
-            ));
-        } catch (Exception e) {
-            log.error("Trying to append DialogueFinished at last failed", e);
-        }
-    }
-
     public static JsonNode dlp2Dcs(JsonNode dlp, String uuid) {
         if (dlp != null) {
             if (dlp.has("to_server")) {
@@ -173,7 +125,6 @@ public class Adapter {
         }
         return NullNode.getInstance();
     }
-
 
     private static JsonNode dlp2Dcs(JsonNode dlp, String uuid, String rootName) {
         ObjectNode assembled = JsonUtil.createObjectNode();
@@ -200,6 +151,4 @@ public class Adapter {
         }
         return NullNode.getInstance();
     }
-
-
 }

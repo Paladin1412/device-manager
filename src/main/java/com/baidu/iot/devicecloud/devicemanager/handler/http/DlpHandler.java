@@ -6,14 +6,10 @@ import com.baidu.iot.devicecloud.devicemanager.bean.InteractiveOnlineRequest;
 import com.baidu.iot.devicecloud.devicemanager.bean.OtaMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dlpclient.builder.PrivateDlpBuilder;
-import com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant;
-import com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant;
 import com.baidu.iot.devicecloud.devicemanager.service.DlpService;
 import com.baidu.iot.devicecloud.devicemanager.service.OtaService;
 import com.baidu.iot.devicecloud.devicemanager.service.PushService;
-import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
-import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +29,7 @@ import java.util.Collections;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.COMMAND_STOP_SPEAK;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DIRECTIVE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_MESSAGE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DLP_DEVICE_ONLINE;
@@ -99,14 +96,16 @@ public class DlpHandler {
                                     default: {
                                         JsonNode parsed = Adapter.dlp2Dcs(jsonNode, null);
                                         if (!parsed.isNull()) {
-                                            DataPointMessage message = new DataPointMessage();
-                                            message.setId(IdGenerator.nextId());
-                                            message.setCode(CoapConstant.COAP_METHOD_PUT);
-                                            message.setVersion(DataPointConstant.DEFAULT_VERSION);
-                                            message.setPath(PathUtil.lookAfterPrefix(DATA_POINT_DUER_DLP));
-                                            message.setPayload(parsed.toString());
-                                            pushService.justPush(message);
-                                            return ServerResponse.ok().build();
+                                            String messageId = parsed.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_HEADER).path(DIRECTIVE_KEY_HEADER_MESSAGE_ID).asText("");
+                                            DeviceResource deviceResource = getDeviceInfoFromRedis(deviceId);
+                                            if (deviceResource != null && StringUtils.hasText(deviceResource.getCltId())) {
+                                                DataPointMessage assembled = Adapter.directive2DataPoint(parsed, DATA_POINT_DUER_DLP, null);
+                                                assembled.setCltId(deviceResource.getCltId());
+                                                assembled.setDeviceId(deviceId);
+                                                assembled.setLogId(messageId);
+                                                pushService.justPush(assembled);
+                                                return ServerResponse.ok().build();
+                                            }
                                         }
                                         return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(BodyInserters.fromObject(failedResponses.apply(logId, "Adapting dlp to dcs failed")));
                                     }

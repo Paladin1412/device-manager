@@ -4,7 +4,6 @@ import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.Response;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,8 +12,6 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-
-import java.util.concurrent.CompletableFuture;
 
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 
@@ -69,9 +66,9 @@ public class DproxyClientProvider implements InitializingBean {
     }
 
     @Retryable(value = {RetryException.class}, backoff = @Backoff(200))
-    public CompletableFuture<Response> setexAsync(String key, long seconds, Object value) {
+    public void setexAsync(String key, long seconds, Object value) {
         if (seconds == 0) {
-            return null;
+            return;
         }
         DproxyRequest request;
         if (seconds < 0) {
@@ -80,7 +77,7 @@ public class DproxyClientProvider implements InitializingBean {
             request = new DproxyRequest("SETEX", prefix + key, seconds, value);
         }
         try {
-            return dproxyClient.sendCommandAsync(request).handleAsync(
+            dproxyClient.sendCommandAsync(request).handleAsync(
                     (r, t) -> {
                         try {
                             if (!r.isSuccessful()) {
@@ -98,7 +95,6 @@ public class DproxyClientProvider implements InitializingBean {
             }
             // pass
             log.warn("dproxy setex {} failed, {}", key, e);
-            return null;
         }
     }
 
@@ -148,7 +144,7 @@ public class DproxyClientProvider implements InitializingBean {
         }
     }
 
-    private boolean expire(String key, long expire) {
+    public boolean expire(String key, long expire) {
         boolean ok = false;
         if (StringUtils.isEmpty(key)) {
             return false;

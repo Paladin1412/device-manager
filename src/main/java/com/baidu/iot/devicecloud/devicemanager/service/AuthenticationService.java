@@ -5,6 +5,7 @@ import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.LocalServerInfo;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
+import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dcsclient.DcsProxyClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.DeviceIamClient;
@@ -51,6 +52,8 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_STATUS;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedDataPointResponses;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.projectExist;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.writeProjectResourceToRedis;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/3/19.
@@ -72,8 +75,8 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
 
     // project info are almost immutable
     // 14 * 24 * 60 * 60 = 1209600
-    @Value("${expire.resource.device: 1209600}")
-    private long deviceResourceExpire;
+    @Value("${expire.resource.project: 1209600}")
+    private long projectResourceExpire;
 
     @Value("${heartbeat.between.device.dh: 60}")
     private int aliveInterval;
@@ -115,8 +118,9 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
         return Mono.from(Mono.justOrEmpty(auth(msg))
                 .filter(deviceResource -> deviceResource != null && StringUtils.hasText(deviceResource.getAccessToken()))
                 .doOnNext(deviceResource -> {
-                    deviceResource.setIp(message.getDeviceIp());
-                    deviceResource.setPort(message.getDevicePort());
+                    Optional.ofNullable(message.getDeviceIp()).ifPresent(deviceResource::setIp);
+                    Optional.ofNullable(message.getDevicePort()).ifPresent(deviceResource::setPort);
+                    writeProject(deviceResource);
                 })
                 .flatMap(deviceResource -> {
                     Stopwatch dcsStopwatch = spanLog.time("dcs");
@@ -197,6 +201,16 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
     private CompletableFuture<Response> informDcsProxyAsync(DeviceResource deviceResource, BaseMessage message) {
         return dcsProxyClient.adviceUserStateAsync(message,
                 deviceResource.getAccessToken(), DCSProxyConstant.USER_STATE_CONNECTED);
+    }
+
+    private void writeProject(DeviceResource deviceResource) {
+        ProjectInfo projectInfo = deviceResource.getProjectInfo();
+        if (projectInfo != null && !projectExist(projectInfo.getId())) {
+            if (StringUtils.hasText(projectInfo.getVoiceId())
+                    && StringUtils.hasText(projectInfo.getVoiceKey())) {
+                writeProjectResourceToRedis(projectInfo, projectResourceExpire);
+            }
+        }
     }
 
     private final Supplier<DataPointMessage> successResponses = () -> {

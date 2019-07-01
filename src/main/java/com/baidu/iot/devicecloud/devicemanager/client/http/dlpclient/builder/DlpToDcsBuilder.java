@@ -27,16 +27,14 @@ public class DlpToDcsBuilder {
 
     private boolean anEvent = false;
 
-    public DlpToDcsBuilder writeEvent() {
+    public void writeEvent() {
         this.data.set("event", event);
         this.anEvent = true;
-        return this;
     }
 
-    public DlpToDcsBuilder writeDirective() {
+    public void writeDirective() {
         this.data.set("directive", event);
         this.anEvent = false;
-        return this;
     }
 
     public DlpToDcsBuilder payload(JsonNode payload) {
@@ -55,7 +53,7 @@ public class DlpToDcsBuilder {
         return this;
     }
 
-    public DlpToDcsBuilder setClientContext(String namespace, String name, String token) {
+    public void setClientContext(String namespace, String name, String token) {
         ObjectNode json = JsonUtil.createObjectNode();
         ObjectNode payload = JsonUtil.createObjectNode();
         ObjectNode header = JsonUtil.createObjectNode();
@@ -68,10 +66,9 @@ public class DlpToDcsBuilder {
         json.set("header", header);
         this.clientContext.add(json);
         this.data.set("clientContext", clientContext);
-        return this;
     }
 
-    public DlpToDcsBuilder setClientContext(String namespace, String name, JsonNode payload) {
+    public void setClientContext(String namespace, String name, JsonNode payload) {
         ObjectNode json = JsonUtil.createObjectNode();
         ObjectNode header = JsonUtil.createObjectNode();
 
@@ -82,6 +79,5 @@ public class DlpToDcsBuilder {
         json.set("header", header);
         this.clientContext.add(json);
         this.data.set("clientContext", clientContext);
-        return this;
     }
 }
