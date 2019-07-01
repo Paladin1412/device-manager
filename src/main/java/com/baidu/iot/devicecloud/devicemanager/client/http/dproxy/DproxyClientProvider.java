@@ -214,6 +214,7 @@ public class DproxyClientProvider implements InitializingBean {
             DproxyRequest request = new DproxyRequest("HSET", prefix + key, hKey, value);
             DproxyResponse response = getConnection(request);
             if (response != null && response.getStatus() == 0) {
+                log.debug("hset successfully. key={}, hKey={}", key, hKey);
                 if (seconds > 0) {
                     return expire(key, seconds);
                 }
@@ -244,7 +245,7 @@ public class DproxyClientProvider implements InitializingBean {
             DproxyRequest request = new DproxyRequest("HDEL", prefix + key, hKey);
             DproxyResponse response = getConnection(request);
             if (response != null && response.getStatus() == 0) {
-                log.debug("hdel successfully res={}", response.getRes());
+                log.debug("hdel successfully. key={}, hKey={}, res={}", key, hKey, response.getRes());
             }
         } catch (Exception e) {
             // pass

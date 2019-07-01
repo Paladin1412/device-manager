@@ -93,9 +93,9 @@ public class DeviceSessionService implements InitializingBean {
             accessTokenService.releaseAccessToken(cuid, logId);
 
             DeviceResource deviceResource = getDeviceInfoFromRedis(cuid);
-            if (StringUtils.hasText(cltId) && deviceResource != null && cltId.equalsIgnoreCase(deviceResource.getCltId())) {
+            /*if (StringUtils.hasText(cltId) && deviceResource != null && cltId.equalsIgnoreCase(deviceResource.getCltId())) {
                 deleteSessionFromRedis(cuid);
-            }
+            }*/
 
             DproxyClientProvider.getInstance().setexAsync(KEY_LAST_DISCONNECTED + cuid, -1, buildCacheData(deviceResource));
             dlpService.forceSendToDlp(cuid, new PrivateDlpBuilder(DLP_DEVICE_OFFLINE).getData());

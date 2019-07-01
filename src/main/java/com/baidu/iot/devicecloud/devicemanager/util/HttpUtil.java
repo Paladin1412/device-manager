@@ -247,6 +247,7 @@ public class HttpUtil {
     public static void writeDeviceResourceToRedis(DeviceResource deviceResource, long expire) {
         String cuid = Optional.ofNullable(deviceResource.getCuid()).orElse(deviceResource.getDeviceUuid());
         if (StringUtils.hasText(cuid)) {
+            log.debug("Writing device resource to session. cuid:{}", cuid);
             clientProvider.hset(CommonConstant.SESSION_KEY_PREFIX + cuid,
                             expire,
                             CommonConstant.SESSION_DEVICE_INFO,
