@@ -93,6 +93,7 @@ public class DeviceSessionService implements InitializingBean {
             accessTokenService.releaseAccessToken(cuid, logId);
 
             DeviceResource deviceResource = getDeviceInfoFromRedis(cuid);
+            // TODO: need to use atom operation
             /*if (StringUtils.hasText(cltId) && deviceResource != null && cltId.equalsIgnoreCase(deviceResource.getCltId())) {
                 deleteSessionFromRedis(cuid);
             }*/

@@ -172,6 +172,7 @@ public class DlpHandler {
             DataPointMessage assembled = Adapter.directive2DataPoint(directive, DATA_POINT_DUER_PRIVATE, null);
             assembled.setCltId(cltId);
             assembled.setDeviceId(deviceUuid);
+            assembled.setSn(messageId);
             assembled.setLogId(messageId);
             pushService.prepareAckPush(assembled);
             String key = assembled.getKey();
@@ -184,6 +185,7 @@ public class DlpHandler {
             DataPointMessage assembled1 = Adapter.directive2DataPoint(dialogueFinished, DATA_POINT_DUER_DIRECTIVE, null);
             assembled1.setCltId(cltId);
             assembled1.setDeviceId(deviceUuid);
+            assembled1.setSn(messageId);
             assembled1.setLogId(messageId);
             return Mono.from(
                     Flux.just(assembled, assembled1)

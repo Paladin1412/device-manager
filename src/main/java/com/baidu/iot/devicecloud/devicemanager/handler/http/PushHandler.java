@@ -30,6 +30,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_METHOD_PUT;
@@ -72,6 +73,9 @@ public class PushHandler {
             }
         });
         request.queryParam(PARAMETER_MESSAGE_ID).ifPresent(message::setLogId);
+        if (StringUtils.isEmpty(message.getSn())) {
+            message.setSn(Optional.ofNullable(message.getLogId()).orElse(UUID.randomUUID().toString()));
+        }
 
         int method = figureOutMethod(request);
         // pushing needs ack

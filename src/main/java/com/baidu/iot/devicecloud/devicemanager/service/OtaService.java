@@ -26,6 +26,8 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
@@ -117,10 +119,13 @@ public class OtaService {
                 DataPointMessage assembled = Adapter.directive2DataPoint(directive, DATA_POINT_DUER_DLP, null);
                 assembled.setCltId(deviceResource.getCltId());
                 assembled.setDeviceId(uuid);
+                String logId = Optional.ofNullable(message.getMessageId()).orElse(UUID.randomUUID().toString());
+                assembled.setSn(logId);
+                assembled.setLogId(logId);
                 pushService.prepareAckPush(assembled);
                 String key = assembled.getKey();
 
-                log.info("Pushed ota update directive to device {}, key:{}", message.getUuid(), key);
+                log.info("Pushed ota update directive to device {}, key:{} logid:{}", message.getUuid(), key, logId);
                 return pushService.push(assembled)
                         .flatMap(response -> {
                             if (response.getCode() == MESSAGE_SUCCESS_CODE) {
