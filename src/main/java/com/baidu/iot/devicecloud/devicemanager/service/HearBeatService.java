@@ -44,9 +44,12 @@ public class HearBeatService extends AbstractLinkableHandlerAdapter<BaseMessage>
                             String cuid = message.getDeviceId();
                             log.info("[Heartbeat] cuid:{} ip:{} port:{}",
                                     message.getDeviceId(), message.getDeviceIp(), message.getDevicePort());
-                            DproxyClientProvider.getInstance().setexAsync(KEY_LAST_HEARTBEAT + cuid, -1, buildCacheData(message));
+                            DeviceSessionService.CacheData cacheData = buildCacheData(message);
+                            DproxyClientProvider dproxyClient = DproxyClientProvider.getInstance();
+                            dproxyClient.setexAsync(KEY_LAST_HEARTBEAT + cuid, -1, cacheData);
                             log.debug("Refreshing session. cuid:{}", cuid);
                             sessionService.freshSession(cuid);
+                            sessionService.updateDisconnectedAccordingHeartbeat(cuid, cacheData, dproxyClient);
                         })
                         .flatMap(msg -> {
                             BaseResponse response = successResponsesWithMessage.apply(msg);

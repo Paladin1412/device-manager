@@ -4,6 +4,7 @@ import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dlpclient.builder.PrivateDlpBuilder;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
 import com.baidu.iot.devicecloud.devicemanager.util.HttpUtil;
+import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -102,6 +103,24 @@ public class DeviceSessionService implements InitializingBean {
 
         // TODO: compatible code, need to delete at next version
         deleteDeviceResourceFromRedis(cuid);
+    }
+
+    void updateDisconnectedAccordingHeartbeat(String cuid, DeviceSessionService.CacheData heartbeat, DproxyClientProvider dproxyClient) {
+        String lastConnectedStr = dproxyClient.get(KEY_LAST_CONNECTED + cuid);
+        String lastDisconnectedStr = dproxyClient.get(KEY_LAST_DISCONNECTED + cuid);
+
+        DeviceSessionService.CacheData lastConnected = JsonUtil.deserialize(lastConnectedStr, DeviceSessionService.CacheData.class);
+        DeviceSessionService.CacheData lastDisconnected = JsonUtil.deserialize(lastDisconnectedStr, DeviceSessionService.CacheData.class);
+        if (lastConnected != null
+                && lastDisconnected != null
+                && lastConnected.getDevicehub().equalsIgnoreCase(lastDisconnected.getDevicehub())) {
+            Date cd = lastConnected.getTime();
+            Date dd = lastDisconnected.getTime();
+            if (cd != null && dd != null && cd.before(dd) && dd.before(heartbeat.getTime())) {
+                lastDisconnected.setTime(new Date(cd.getTime() - 1000));
+                dproxyClient.setexAsync(KEY_LAST_DISCONNECTED + cuid, -1, lastDisconnected);
+            }
+        }
     }
 
     private CacheData buildCacheData(DeviceResource deviceResource) {
