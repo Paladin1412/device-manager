@@ -163,6 +163,7 @@ public class DlpHandler {
         if (deviceResource != null && StringUtils.hasText(deviceResource.getCltId())) {
             String cltId = deviceResource.getCltId();
             String messageId = data.path(DIRECTIVE_KEY_HEADER).path(DIRECTIVE_KEY_HEADER_MESSAGE_ID).asText();
+            long logId = System.currentTimeMillis();
             JsonNode directive = assembleDuerPrivateDirective(
                     GET_STATUS,
                     null,
@@ -173,7 +174,7 @@ public class DlpHandler {
             assembled.setCltId(cltId);
             assembled.setDeviceId(deviceUuid);
             assembled.setSn(messageId);
-            assembled.setLogId(messageId);
+            assembled.setLogId(Long.toString(logId));
             pushService.prepareAckPush(assembled);
             String key = assembled.getKey();
 
@@ -186,7 +187,8 @@ public class DlpHandler {
             assembled1.setCltId(cltId);
             assembled1.setDeviceId(deviceUuid);
             assembled1.setSn(messageId);
-            assembled1.setLogId(messageId);
+            assembled1.setLogId(Long.toString(logId));
+            log.debug("Getting device status. data:{} cuid:{} logid:{}", data, deviceUuid, logId);
             return Mono.from(
                     Flux.just(assembled, assembled1)
                     .flatMapSequential(pushService::push)

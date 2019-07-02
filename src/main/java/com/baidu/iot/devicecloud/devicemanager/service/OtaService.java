@@ -119,9 +119,10 @@ public class OtaService {
                 DataPointMessage assembled = Adapter.directive2DataPoint(directive, DATA_POINT_DUER_DLP, null);
                 assembled.setCltId(deviceResource.getCltId());
                 assembled.setDeviceId(uuid);
-                String logId = Optional.ofNullable(message.getMessageId()).orElse(UUID.randomUUID().toString());
-                assembled.setSn(logId);
-                assembled.setLogId(logId);
+                String sn = Optional.ofNullable(message.getMessageId()).orElse(UUID.randomUUID().toString());
+                assembled.setSn(sn);
+                long logId = System.currentTimeMillis();
+                assembled.setLogId(Long.toString(logId));
                 pushService.prepareAckPush(assembled);
                 String key = assembled.getKey();
 
