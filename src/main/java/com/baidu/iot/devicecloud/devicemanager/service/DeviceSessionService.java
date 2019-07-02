@@ -98,7 +98,7 @@ public class DeviceSessionService implements InitializingBean {
                 deleteSessionFromRedis(cuid);
             }*/
 
-            DproxyClientProvider.getInstance().setexAsync(KEY_LAST_DISCONNECTED + cuid, -1, buildCacheData(deviceResource));
+            DproxyClientProvider.getInstance().setex(KEY_LAST_DISCONNECTED + cuid, -1, buildCacheData(deviceResource));
             dlpService.forceSendToDlp(cuid, new PrivateDlpBuilder(DLP_DEVICE_OFFLINE).getData());
 
             // TODO: compatible code, need to delete at next version
