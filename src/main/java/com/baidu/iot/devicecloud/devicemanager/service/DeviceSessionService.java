@@ -87,24 +87,21 @@ public class DeviceSessionService implements InitializingBean {
     }
 
     void clearSession(String cuid, String cltId, String logId) {
-        commonSideExecutor.submit(() -> {
-            log.debug("Clearing device session. cuid:{} logid:{}", cuid, logId);
-            deviceOnlineStatus(cuid, false);
-            accessTokenService.releaseAccessToken(cuid, logId);
+        log.debug("Clearing device session. cuid:{} logid:{}", cuid, logId);
+        deviceOnlineStatus(cuid, false);
+        accessTokenService.releaseAccessToken(cuid, logId);
 
-            DeviceResource deviceResource = getDeviceInfoFromRedis(cuid);
-            // TODO: need to use atom operation
+        DeviceResource deviceResource = getDeviceInfoFromRedis(cuid);
+        // TODO: need to use atom operation
             /*if (StringUtils.hasText(cltId) && deviceResource != null && cltId.equalsIgnoreCase(deviceResource.getCltId())) {
                 deleteSessionFromRedis(cuid);
             }*/
 
-            DproxyClientProvider.getInstance().setex(KEY_LAST_DISCONNECTED + cuid, -1, buildCacheData(deviceResource));
-            dlpService.forceSendToDlp(cuid, new PrivateDlpBuilder(DLP_DEVICE_OFFLINE).getData());
+        DproxyClientProvider.getInstance().setex(KEY_LAST_DISCONNECTED + cuid, -1, buildCacheData(deviceResource));
+        dlpService.forceSendToDlp(cuid, new PrivateDlpBuilder(DLP_DEVICE_OFFLINE).getData());
 
-            // TODO: compatible code, need to delete at next version
-            deleteDeviceResourceFromRedis(cuid);
-            }
-        );
+        // TODO: compatible code, need to delete at next version
+        deleteDeviceResourceFromRedis(cuid);
     }
 
     private CacheData buildCacheData(DeviceResource deviceResource) {
