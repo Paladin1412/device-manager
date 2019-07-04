@@ -35,7 +35,6 @@ public class GreyConfiguration implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() {
-        log.debug("greyConfBns: {}", bns);
         Executors
                 .newSingleThreadScheduledExecutor()
                 .scheduleAtFixedRate(
@@ -62,6 +61,7 @@ public class GreyConfiguration implements InitializingBean {
             in.close();
 
             if (result != null && !result.isNull()) {
+                log.debug("Read grey configuration:\n{}", result);
                 conf = result;
             }
         } catch (Exception e) {
