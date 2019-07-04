@@ -15,26 +15,26 @@ import java.io.IOException;
  * @author Shen Dayu (shendayu@baidu.com)
  **/
 @Slf4j
-@Component("bigpipeClientProvider")
+@Component("bigpipeClientGreyProvider")
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
-public class BigpipeClientProviderImpl implements BigpipeClientProvider {
+public class BigpipeClientProviderGreyImpl implements BigpipeClientProvider {
 
     private volatile boolean initialized;
 
-    private final BigpipeConfig config;
+    private final BigpipeGreyConfig config;
 
     public BigpipeQueueClient getBigpipeQueueClient(String queue) throws BigpipeException {
         if (!initialized) {
             initialize();
         }
-        return new BigpipeQueueClientImpl(config, queue);
+        return new BigpipeQueueClientGreyImpl(config, queue);
     }
 
     public BigpipeWriterClient getBigpipeWriterClient(String queue) throws BigpipeException {
         if (!initialized) {
             initialize();
         }
-        return new BigpipeWriterClientImpl(config, queue);
+        return new BigpipeWriterClientGreyImpl(config, queue);
     }
 
     @PreDestroy
@@ -51,7 +51,7 @@ public class BigpipeClientProviderImpl implements BigpipeClientProvider {
     }
 
     private void initialize() throws BigpipeException {
-        synchronized (BigpipeClientProviderImpl.class) {
+        synchronized (BigpipeClientProviderGreyImpl.class) {
             if (initialized) {
                 return;
             }

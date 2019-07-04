@@ -26,9 +26,9 @@ import java.util.concurrent.LinkedBlockingDeque;
 @Component
 @Slf4j
 @Lazy
-public class BigpipeWriterManager implements InitializingBean {
+public class BigpipeWriterGreyManager implements InitializingBean {
 
-    private final BigpipeConfig config;
+    private final BigpipeGreyConfig config;
 
     private final BigpipeClientProvider bigpipeClientProvider;
 
@@ -37,7 +37,7 @@ public class BigpipeWriterManager implements InitializingBean {
     private HashMap<String, List<Integer>> messagePipeletMap;
 
     @Autowired
-    public BigpipeWriterManager(BigpipeConfig config, @Qualifier("bigpipeClientProvider") BigpipeClientProvider bigpipeClientProvider) {
+    public BigpipeWriterGreyManager(BigpipeGreyConfig config, @Qualifier("bigpipeClientGreyProvider") BigpipeClientProvider bigpipeClientProvider) {
         this.config = config;
         this.bigpipeClientProvider = bigpipeClientProvider;
         writersList = new HashMap<>();

@@ -47,6 +47,8 @@ public class CommonConstant {
     public static final String PARAMETER_CLIENT_ID = "clt_id";
     public static final String PARAMETER_MESSAGE_ID = "msgid";
 
+    public static final String GREY_PEPPA_TEST_DEVICE = "peppa_test_device";
+
     // splitters
     public static final String SPLITTER_DOLLAR = "$";
     public static final String SPLITTER_URL = "/";

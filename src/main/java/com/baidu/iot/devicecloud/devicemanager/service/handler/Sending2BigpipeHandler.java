@@ -72,7 +72,8 @@ public class Sending2BigpipeHandler extends AbstractLinkableDataPointHandler {
         DeviceBaseMessage baseMessage = assembleMessage(message);
         if (baseMessage != null) {
             sender.send(
-                    userDataPoints.contains(path) ? SenderChannelType.USER : SenderChannelType.SYSTEM, baseMessage,
+                    userDataPoints.contains(path) ? SenderChannelType.USER : SenderChannelType.SYSTEM,
+                    baseMessage,
                     message.getLogId()
             );
         }

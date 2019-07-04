@@ -48,3 +48,22 @@ bigpipe.password=iotpaas@2015
 bigpipe.msg.pipelet.map=USER:9,10|DATA:1,2,4,5,6,7,8|HEARTBEAT:1,2,4,5,6,7,8|DEFAULT:1,2,4,5,6,7,8
 # init max writers per pipe
 bigpipe.client.number.per.pipe=30
+
+#bigpipe cluster
+grey.bigpipe.clustername=bigpipe_bws_cluster
+
+#test url
+grey.bigpipe.zookeeper.url=zk-bigpipe-proxy.dmop.baidu.com:2181
+grey.bigpipe.zookeeper.timeout=20000
+
+# bigpipe pipe
+grey.bigpipe.pipename=iotpaas-bws-pipe
+grey.bigpipe.username=iotpaas
+grey.bigpipe.password=iotpaaspwd
+
+# pipelet writers map & init pipelet writers
+grey.bigpipe.msg.pipelet.map=DATA:10|HEARTBEAT:10|DEFAULT:10
+# init max writers per pipe
+grey.bigpipe.client.number.per.pipe=5
+
+grey.conf.bns_group=group.duer-peggy-online-conf.IOT.all
