@@ -28,8 +28,6 @@ public class RemoteServerConfig {
     public static String DI_BNS;
     public static String DI_API;
 
-    public static String GREY_CONF_API;
-
     @Value("${dproxy.bns:}")
     public void setDproxyBns(String dproxyBns) {
         DPROXY_BNS = dproxyBns;
@@ -78,10 +76,5 @@ public class RemoteServerConfig {
     @Value("${di.api:}")
     public void setDiApi(String diApi) {
         DI_API = diApi;
-    }
-
-    @Value("${grey.conf.bns_group:}")
-    public void setGreyConfApi(String greyConfApi) {
-        GREY_CONF_API = greyConfApi;
     }
 }

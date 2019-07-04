@@ -4,6 +4,9 @@ import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.io.InputStream;
@@ -11,7 +14,6 @@ import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.GREY_CONF_API;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_PEPPA_TEST_DEVICE;
 
 /**
@@ -20,18 +22,26 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GR
  * @author <a href="mailto:yaogang AT baidu DOT com">Yao Gang</a>
  */
 @Slf4j
-public class GreyConfiguration {
+@Component
+public class GreyConfiguration implements InitializingBean {
     private final static String GET_CONF_BY_BNS = "get_instance_by_service %s -c";
     @Getter
     private static JsonNode conf = JsonUtil.createObjectNode();
 
-    static {
+    @Value("${grey.conf.interval:30}")
+    public Long refreshInterval;
+    @Value("${grey.conf.bns_group:}")
+    private String bns;
+
+    @Override
+    public void afterPropertiesSet() {
+        log.debug("greyConfBns: {}", bns);
         Executors
                 .newSingleThreadScheduledExecutor()
                 .scheduleAtFixedRate(
-                        () -> refreshConf(GREY_CONF_API),
-                        10,
-                        20,
+                        () -> refreshConf(bns),
+                        0,
+                        refreshInterval,
                         TimeUnit.SECONDS
                 );
     }
