@@ -112,6 +112,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
         msg.setBns(localServerInfo.toString());
 
         Log spanLog = logProvider.get(message.getLogId());
+        String logId = spanLog.getLogId();
         spanLog.setCuId(message.getDeviceId());
         infoLog.info(spanLog.format(String.format("[AUTH] Authoring:%s", String.valueOf(msg))));
 
@@ -135,7 +136,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                                         infoLog.info(spanLog.format(String.format("[AUTH] Dcs responses:%s", jsonNode.toString())));
                                         if (jsonNode.path(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE) {
                                             assignAddr(response, deviceResource);
-                                            deviceSessionService.setSession(deviceResource, message.getLogId());
+                                            deviceSessionService.setSession(deviceResource, logId);
                                             return successResponses.get();
                                         } else {
                                             ArrayNode data = (ArrayNode)jsonNode.path(JSON_KEY_DATA);
@@ -169,7 +170,7 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
                                 )
                         )
                 )
-                .doFinally(signalType -> logProvider.revoke(message.getLogId()))
+                .doFinally(signalType -> logProvider.revoke(logId))
         );
     }
 

@@ -25,7 +25,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
-import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.COMMAND_STOP_SPEAK;
@@ -188,6 +189,10 @@ public class DlpHandler {
             assembled1.setDeviceId(deviceUuid);
             assembled1.setSn(messageId);
             assembled1.setLogId(Long.toString(logId));
+
+            List<Integer> stub = new LinkedList<>();
+            stub.add(assembled.getId());
+
             log.debug("Getting device status. data:{} cuid:{} logid:{}", data, deviceUuid, logId);
             return Mono.from(
                     Flux.just(assembled, assembled1)
@@ -196,7 +201,7 @@ public class DlpHandler {
                     .flatMap(response -> {
                         if (response.getCode() == MESSAGE_SUCCESS_CODE) {
                             return pushService
-                                    .check(assembled, key, Collections.singletonList(assembled.getId()))
+                                    .check(assembled, key, stub)
                                     .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(key, String.format("Waiting ack timeout. key:%s", key))))
                                     .flatMap(baseResponse -> {
                                         if (baseResponse.getCode() == MESSAGE_SUCCESS_CODE) {

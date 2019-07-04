@@ -24,7 +24,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
-import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -126,12 +126,15 @@ public class OtaService {
                 pushService.prepareAckPush(assembled);
                 String key = assembled.getKey();
 
+                List<Integer> stub = new LinkedList<>();
+                stub.add(assembled.getId());
+
                 log.info("Pushed ota update directive to device {}, key:{} logid:{}", message.getUuid(), key, logId);
                 return pushService.push(assembled)
                         .flatMap(response -> {
                             if (response.getCode() == MESSAGE_SUCCESS_CODE) {
                                 return pushService
-                                        .check(assembled, key, Collections.singletonList(assembled.getId()))
+                                        .check(assembled, key, stub)
                                         .timeout(Duration.ofSeconds(5), Mono.just(failedResponses.apply(key, String.format("Waiting ack timeout. key:%s", key))))
                                         .flatMap(baseResponse -> ServerResponse.ok().body(BodyInserters.fromObject(baseResponse)));
                             } else {
