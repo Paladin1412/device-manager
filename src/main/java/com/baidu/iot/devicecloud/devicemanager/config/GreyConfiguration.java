@@ -2,6 +2,7 @@ package com.baidu.iot.devicecloud.devicemanager.config;
 
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
@@ -26,7 +27,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GR
 public class GreyConfiguration implements InitializingBean {
     private final static String GET_CONF_BY_BNS = "get_instance_by_service %s -c";
     @Getter
-    private static JsonNode conf = JsonUtil.createObjectNode();
+    private static JsonNode conf = new ObjectMapper().createObjectNode();
 
     @Value("${grey.conf.interval:30}")
     public Long refreshInterval;
