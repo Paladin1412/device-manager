@@ -15,7 +15,8 @@ import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_PEPPA_TEST_DEVICE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_CONF;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_CONF_PEPPA_TEST_DEVICE;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/7/4.
@@ -75,7 +76,7 @@ public class GreyConfiguration implements InitializingBean {
     }
 
     public static boolean checkIfTestDevice(String cuid) {
-        JsonNode testDevices = get(GREY_PEPPA_TEST_DEVICE);
+        JsonNode testDevices = get(GREY_CONF_PEPPA_TEST_DEVICE);
 
         if (testDevices == null || testDevices.isNull() || testDevices.isMissingNode()) {
             return false;
@@ -96,6 +97,6 @@ public class GreyConfiguration implements InitializingBean {
 
     @SuppressWarnings("SameParameterValue")
     private static JsonNode get(String key) {
-        return conf.path(key);
+        return conf.path(GREY_CONF).path(key);
     }
 }
