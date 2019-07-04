@@ -2,6 +2,8 @@ HELP.md
 .gradle
 /build/
 /scripts/
+/local/
+/LOG_PATH_IS_UNDEFINED
 
 ### STS ###
 .apt_generated
