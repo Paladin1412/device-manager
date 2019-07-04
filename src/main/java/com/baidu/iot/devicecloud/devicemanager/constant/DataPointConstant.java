@@ -13,6 +13,7 @@ public class DataPointConstant {
 
     public static final String DATA_POINT_DUER_DIRECTIVE = "duer_directive";
     public static final String DATA_POINT_DUER_EVENT = "duer_event";
+    public static final String DATA_POINT_DUER_ACK = "duer_ack";
     public static final String DATA_POINT_DUER_PRIVATE = "duer_private";
     public static final String DATA_POINT_DUER_DLP = "duer_dlp";
     public static final String DATA_POINT_PACKAGE_INFO = "package_info";
