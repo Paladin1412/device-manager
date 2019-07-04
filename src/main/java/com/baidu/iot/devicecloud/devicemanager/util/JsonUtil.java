@@ -136,6 +136,15 @@ public class JsonUtil {
         return objectMapper.writer().writeValueAsString(object);
     }
 
+    public static Map<String, Object> convert2Map(JsonNode node) {
+        try {
+            return objectMapper.convertValue(node, new TypeReference<Map<String,Object>>() {});
+        } catch (IllegalArgumentException e) {
+            log.warn("Converting to map failed: {}", node, e);
+        }
+        return null;
+    }
+
     public static void appendAsQueryParams(UriBuilder builder, Object o) {
         Map<String,String> converted = objectMapper.convertValue(o, new TypeReference<Map<String,String>>() {});
         converted.forEach(builder::queryParam);

@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_TRACE_INFO;
@@ -100,13 +101,20 @@ public class Sending2BigpipeHandler extends AbstractLinkableDataPointHandler {
             baseMessage.setTimestamp(System.currentTimeMillis());
 
             baseMessage.setDeviceUuid(message.getDeviceId());
-            baseMessage.setRawPayload(message.getPayload());
             baseMessage.setLogId(message.getLogId());
-            baseMessage.setData(new HashMap<String, Object>(){
-                {
-                    put(PathUtil.dropOffPrefix(message.getPath(), SPLITTER_URL), message.getPayload());
+
+            String payload = message.getPayload();
+            if (StringUtils.hasText(payload)) {
+                baseMessage.setRawPayload(message.getPayload());
+                Map<String, Object> map = JsonUtil.convert2Map(JsonUtil.readTree(payload));
+                if (map != null) {
+                    baseMessage.setData(new HashMap<String, Object>(){
+                        {
+                            put(PathUtil.dropOffPrefix(message.getPath(), SPLITTER_URL), map);
+                        }
+                    });
                 }
-            });
+            }
 
             if (StringUtils.hasText(message.getDeviceIp())) {
                 baseMessage.setSourceHostAddress(message.getDeviceIp());
