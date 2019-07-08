@@ -48,7 +48,7 @@ public class CommonConstant {
     public static final String PARAMETER_MESSAGE_ID = "msgid";
 
     public static final String GREY_CONF = "grey_conf";
-    public static final String GREY_CONF_PEPPA_TEST_DEVICE = "peppa_test_device";
+    public static final String GREY_CONF_USE_OFFLINE_PIPELET = "use_offline_pipelet";
 
     // splitters
     public static final String SPLITTER_DOLLAR = "$";

@@ -16,7 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_CONF;
-import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_CONF_PEPPA_TEST_DEVICE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_CONF_USE_OFFLINE_PIPELET;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/7/4.
@@ -75,20 +75,54 @@ public class GreyConfiguration implements InitializingBean {
         }
     }
 
-    public static boolean checkIfTestDevice(String cuid) {
-        JsonNode testDevices = get(GREY_CONF_PEPPA_TEST_DEVICE);
+    public static boolean checkGreyConf(String cuid) {
+        try {
+            JsonNode testDevices = get(GREY_CONF_USE_OFFLINE_PIPELET);
 
-        if (testDevices == null || testDevices.isNull() || testDevices.isMissingNode()) {
-            return false;
+            if (testDevices == null || testDevices.isNull() || testDevices.isMissingNode()) {
+                return false;
+            }
+
+            if (isAll(testDevices)) {
+                return true;
+            }
+
+            String project = cuid.substring(0, 4);
+            String hex = cuid.substring(4);
+            Long seq = Long.valueOf(hex, 16);
+
+            Set<String> devices = StringUtils.commaDelimitedListToSet(testDevices.asText());
+            for (String s : devices) {
+                String[] items = StringUtils.commaDelimitedListToStringArray(s);
+                if (items.length != 3) {
+                    log.debug("Grey info conf error:{}", s);
+                    continue;
+                }
+                String greyPid = items[0];
+                String greyBegin = items[1];
+                String greyEnd   = items[2];
+                // Not the current project id
+                if (!greyPid.equalsIgnoreCase(project)) {
+                    continue;
+                }
+                // All case
+                if (greyBegin.equalsIgnoreCase("ALL")
+                        && greyEnd.equalsIgnoreCase("ALL")) {
+                    return  true;
+                }
+
+                // Turn uuid to long
+                Long begin = Long.valueOf(greyBegin, 16);
+                Long end   = Long.valueOf(greyEnd, 16);
+                if (seq >= begin && seq <= end) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Checking if {} is peppa device failed", cuid, e);
         }
 
-        if (isAll(testDevices)) {
-            return true;
-        }
-
-        Set<String> deviceIds = StringUtils.commaDelimitedListToSet(testDevices.asText());
-
-        return deviceIds.contains(cuid);
+        return false;
     }
 
     private static boolean isAll(JsonNode node) {

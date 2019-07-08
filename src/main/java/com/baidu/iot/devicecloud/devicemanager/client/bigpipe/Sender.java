@@ -96,7 +96,7 @@ public class Sender {
     public void send(SenderChannelType channelType, DeviceBaseMessage message, String logId) {
         String messageStr = JsonUtil.serialize(message);
         String cuid = message.getDeviceUuid();
-        if (StringUtils.hasText(cuid) && GreyConfiguration.checkIfTestDevice(cuid)) {
+        if (StringUtils.hasText(cuid) && GreyConfiguration.checkGreyConf(cuid)) {
             log.debug("Send to the grey configured bigpipe");
             sendGrey(channelType.toString(), messageStr, logId);
         } else {
