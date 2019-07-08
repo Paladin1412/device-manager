@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_CONF;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_CONF_USE_OFFLINE_PIPELET;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_UNDERSCORE;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/7/4.
@@ -93,7 +94,7 @@ public class GreyConfiguration implements InitializingBean {
 
             Set<String> devices = StringUtils.commaDelimitedListToSet(testDevices.asText());
             for (String s : devices) {
-                String[] items = StringUtils.commaDelimitedListToStringArray(s);
+                String[] items = StringUtils.delimitedListToStringArray(s, SPLITTER_UNDERSCORE);
                 if (items.length != 3) {
                     log.debug("Grey info conf error:{}", s);
                     continue;

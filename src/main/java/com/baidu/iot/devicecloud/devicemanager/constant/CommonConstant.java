@@ -57,6 +57,7 @@ public class CommonConstant {
     public static final String SPLITTER_SPACE = " ";
     public static final String SPLITTER_EQUALITY_SIGN = "=";
     public static final String SPLITTER_SEMICOLON = ";";
+    public static final String SPLITTER_UNDERSCORE = "_";
     public static final String SPLITTER_LF = "\n";
 
     public static final String DATETIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";
