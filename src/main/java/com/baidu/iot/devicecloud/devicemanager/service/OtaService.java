@@ -73,6 +73,9 @@ public class OtaService {
             JsonNode payload = data.path("payload");
             CheckOtaResult otaResult = JsonUtil.deserialize(payload.toString(), CheckOtaResult.class);
             if (otaResult != null) {
+                if (StringUtils.isEmpty(otaResult.getDeviceUuid())) {
+                    otaResult.setDeviceUuid(uuid);
+                }
                 OtaTaskCreateRequest createRequest = new OtaTaskCreateRequest();
                 BeanUtils.copyProperties(otaResult, createRequest);
 
