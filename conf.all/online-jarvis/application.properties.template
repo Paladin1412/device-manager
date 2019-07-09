@@ -24,7 +24,7 @@ tts.proxy.bns=group.ttsproxy-jarvis-online.IOT.all
 tts.proxy.api=
 #tts.proxy.api=127.0.0.1:8099
 
-dh.bns=unknown_bns_dh
+dh.bns=dh2.audio.hb
 dh.api=10.211.245.46:8206
 
 local.server.port=
