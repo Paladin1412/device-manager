@@ -137,6 +137,14 @@ public class HttpUtil {
                 return response;
             };
 
+    public static DataPointMessage transformedDataPointResponses(DataPointMessage message, Integer code) {
+        message.setPayload(null);
+        message.setPath(null);
+        message.setMisc(null);
+        message.setCode(code);
+        return message;
+    }
+
     public static Supplier<Function<String, Mono<ServerResponse>>> deviceMayNotOnline =
             () -> uuid -> ServerResponse.badRequest().body(BodyInserters.fromObject(failedResponses.apply(null, String.format("This device may not online: %s", uuid))));
 

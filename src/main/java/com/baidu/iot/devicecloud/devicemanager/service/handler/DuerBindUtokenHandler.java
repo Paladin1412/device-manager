@@ -38,6 +38,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.PRIVATE_BIND_NAMESPACE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_BIND_UTOKEN;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.transformedDataPointResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.JsonUtil.assembleDirective;
 
 /**
@@ -106,12 +107,12 @@ public class DuerBindUtokenHandler extends AbstractLinkableDataPointHandler {
                 })
                 .flatMap(baseResponse -> {
                     if (baseResponse.getCode() == MESSAGE_SUCCESS_CODE) {
-                        return Mono.just(transform(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID));
+                        return Mono.just(transformedDataPointResponses(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID));
                     }
-                    return Mono.just(transform(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_INVALID));
+                    return Mono.just(transformedDataPointResponses(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_INVALID));
                 })
-                .switchIfEmpty(Mono.defer(() -> Mono.just(transform(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_NOT_FOUND))))
-                .onErrorResume(t -> Mono.just(transform(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_BAD_REQUEST)))
+                .switchIfEmpty(Mono.defer(() -> Mono.just(transformedDataPointResponses(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_NOT_FOUND))))
+                .onErrorResume(t -> Mono.just(transformedDataPointResponses(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_BAD_REQUEST)))
         );
     }
 
@@ -172,12 +173,5 @@ public class DuerBindUtokenHandler extends AbstractLinkableDataPointHandler {
         payload.set("format", TextNode.valueOf("AUDIO_MPEG"));
         payload.set("code", TextNode.valueOf(Integer.toString(code)));
         return payload;
-    }
-
-    private DataPointMessage transform(DataPointMessage origin, int code) {
-        origin.setPath(null);
-        origin.setPayload(null);
-        origin.setCode(code);
-        return origin;
     }
 }

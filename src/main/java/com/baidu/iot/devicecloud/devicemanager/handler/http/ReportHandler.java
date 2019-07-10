@@ -3,6 +3,7 @@ package com.baidu.iot.devicecloud.devicemanager.handler.http;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
+import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
 import com.baidu.iot.devicecloud.devicemanager.service.ReportService;
 import com.baidu.iot.devicecloud.devicemanager.service.extractor.ReportMessageExtractor;
 import lombok.extern.slf4j.Slf4j;
@@ -108,8 +109,10 @@ public class ReportHandler {
                     if (o instanceof DataPointMessage) {
                         DataPointMessage message = (DataPointMessage) o;
                         if (isCoapOk.test(message)) {
-                            builder
-                                    .header(HEADER_ALIVE_INTERVAL, Integer.toString(aliveInterval));
+                            if (MessageType.AUTHORIZATION == parseMessageType(messageType)) {
+                                builder
+                                        .header(HEADER_ALIVE_INTERVAL, Integer.toString(aliveInterval));
+                            }
                             succeeded.accept(builder);
                         } else {
                             failed.accept(builder);

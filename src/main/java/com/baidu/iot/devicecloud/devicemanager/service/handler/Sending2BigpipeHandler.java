@@ -22,11 +22,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_TRACE_INFO;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_OTA_EVENT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_PACKAGE_INFO;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getDeviceInfoFromRedis;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.transformedDataPointResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.JsonUtil.assembleToClientUpdateProgress;
 
 /**
@@ -78,7 +80,7 @@ public class Sending2BigpipeHandler extends AbstractLinkableDataPointHandler {
                     message.getLogId()
             );
         }
-        return Mono.empty();
+        return Mono.just(transformedDataPointResponses(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID));
     }
 
     @Nullable

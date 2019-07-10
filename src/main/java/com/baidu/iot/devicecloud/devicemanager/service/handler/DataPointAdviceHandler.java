@@ -15,6 +15,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_NEED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_SECRET_KEY;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_ACK;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.transformedDataPointResponses;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/4/24.
@@ -39,10 +40,7 @@ public class DataPointAdviceHandler extends AbstractLinkableDataPointHandler {
     @Override
     Mono<Object> work(DataPointMessage message) {
         boolean flag = try2Advice(message);
-        message.setMisc(null);
-        message.setPath(null);
-        message.setCode(flag ? COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID : COAP_RESPONSE_CODE_DUER_MSG_RSP_NOT_IMPLEMENTED);
-        return Mono.just(message);
+        return Mono.just(transformedDataPointResponses(message, flag ? COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID : COAP_RESPONSE_CODE_DUER_MSG_RSP_NOT_IMPLEMENTED));
     }
 
     private boolean try2Advice(DataPointMessage message) {
