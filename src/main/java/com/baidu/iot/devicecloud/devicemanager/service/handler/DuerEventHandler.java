@@ -77,13 +77,13 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PA
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_METADATA;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_COLON;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_EVENT;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_AUTHORIZATION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_DUEROS_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_LINK_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_STANDBY_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_USER_AGENT;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.transformedDataPointResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlush;
 
 /**
@@ -148,7 +148,7 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
                         },
                                 throwable -> log.error("Dealing with the duer event failed", throwable))
         );
-        return Mono.just(transformedDataPointResponses(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID));
+        return Mono.just(successDataPointResponses.apply(message.getId()));
     }
 
     private Flux<BaseResponse> doWork(DataPointMessage message, String accessToken) {
@@ -317,6 +317,14 @@ public class DuerEventHandler extends AbstractLinkableDataPointHandler {
             super.close(ctx, promise);
         }
     }
+
+    private final Function<Integer, DataPointMessage> successDataPointResponses = id -> {
+        DataPointMessage response = new DataPointMessage();
+        response.setVersion(DEFAULT_VERSION);
+        response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID);
+        response.setId(id);
+        return response;
+    };
 
     private final Function<DataPointMessage, DataPointMessage> unauthorizedResponses = (origin) -> {
         DataPointMessage response = new DataPointMessage();
