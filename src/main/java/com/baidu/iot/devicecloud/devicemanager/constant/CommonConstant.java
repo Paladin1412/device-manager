@@ -60,7 +60,7 @@ public class CommonConstant {
     public static final String SPLITTER_LF = "\n";
 
     public static final String DATETIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";
-    public static final String LOGTIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
+    public static final String LOG_DATETIME_FORMAT = "yyyy-MM-dd_HH:mm:ss.SSS";
 
     public static final String SESSION_KEY_PREFIX = "duer:iot:device:session:";
     public static final String SESSION_DEVICE_ONLINE_STATUS = "onlineStatus";

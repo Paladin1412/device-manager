@@ -42,7 +42,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.TimeZone;
 
-import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.LOGTIME_FORMAT;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.LOG_DATETIME_FORMAT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_BEARER;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_DUEROS_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_PARAM;
@@ -103,7 +103,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                 UnicastProcessor.create(Queues.<TlvMessage>xs().get());
 
 
-        this.sdf = new SimpleDateFormat(LOGTIME_FORMAT);
+        this.sdf = new SimpleDateFormat(LOG_DATETIME_FORMAT);
         this.sdf.setTimeZone(TimeZone.getTimeZone(config.getDmTimezone()));
     }
 
@@ -207,6 +207,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                 log.debug("The upstream finish package(0x0004) has come, completing the work queue");
                 workQueue.onComplete();
                 stopwatch.pause();
+                spanLog.time("after_asr");
                 infoLog.info(spanLog.format("[ASR] Asr finished."));
             }
             return;

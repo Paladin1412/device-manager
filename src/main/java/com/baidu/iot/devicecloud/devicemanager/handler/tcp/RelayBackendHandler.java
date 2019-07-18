@@ -28,7 +28,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.TimeZone;
 
-import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.LOGTIME_FORMAT;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.LOG_DATETIME_FORMAT;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CUID;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.SN;
@@ -74,7 +74,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
         this.downstreamChannel = downstreamChannel;
         this.downstreamWorkQueue = downstreamWorkQueue;
         this.processor = new DirectiveProcessor(ttsService);
-        this.sdf = new SimpleDateFormat(LOGTIME_FORMAT);
+        this.sdf = new SimpleDateFormat(LOG_DATETIME_FORMAT);
         this.sdf.setTimeZone(TimeZone.getTimeZone(config.getDmTimezone()));
         this.workQueue =
                 UnicastProcessor.create(Queues.<TlvMessage>xs().get());
