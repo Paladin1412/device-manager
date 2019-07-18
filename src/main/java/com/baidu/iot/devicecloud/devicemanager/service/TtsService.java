@@ -6,6 +6,7 @@ import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.baidu.iot.log.Log;
 import com.baidu.iot.log.LogProvider;
+import com.baidu.iot.log.Stopwatch;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Response;
@@ -65,12 +66,11 @@ public class TtsService {
 
     public Map<String, String> requestTTSSync(TtsRequest message, boolean isPre, Map<String, String> keysMap) {
         Log spanLog = logProvider.get(message.getSn());
-        spanLog.time("pre_tts");
+        Stopwatch stopwatch = spanLog.time("final_tts");
         infoLog.info("[ASR] Start to process the final tts. logid:{}", spanLog.getLogId());
 
         Map<String, String> urlmap = new HashMap<>();
         try(Response response = client.requestTtsSync(message, isPre, keysMap)) {
-            infoLog.info(spanLog.format("[ASR] Finished to process the final tts."));
             if (response != null && response.isSuccessful() && !isPre) {
                 ResponseBody body = response.body();
                 if (body != null) {
@@ -79,7 +79,9 @@ public class TtsService {
             }
         } catch (Exception e) {
             log.error("Requesting tts in a sync way failed", e);
+            infoLog.error(spanLog.format("[ASR] Process the final tts is failed."), e);
         }
+        stopwatch.pause();
         return urlmap;
     }
 

@@ -42,7 +42,6 @@ public class CommonConstant {
     public static final String PARAMETER_AUDIO = "audio";
     public static final String PARAMETER_NAME = "name";
     public static final String PARAMETER_CID = "cid:";
-    public static final String PARAMETER_CONTENT_DISPOSITION = "content-disposition";
     public static final String PARAMETER_CONTENT_ID = "Content-ID";
     public static final String PARAMETER_CLIENT_ID = "clt_id";
     public static final String PARAMETER_MESSAGE_ID = "msgid";
@@ -61,6 +60,7 @@ public class CommonConstant {
     public static final String SPLITTER_LF = "\n";
 
     public static final String DATETIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+    public static final String LOGTIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
 
     public static final String SESSION_KEY_PREFIX = "duer:iot:device:session:";
     public static final String SESSION_DEVICE_ONLINE_STATUS = "onlineStatus";

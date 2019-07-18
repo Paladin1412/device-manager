@@ -137,8 +137,9 @@ public class DirectiveProcessor {
                                                 TtsRequest request = assembleTtsRequest(cuid, sn, bytes, MessageType.BASE);
                                                 if (isPreTTSTlv.test(tlv)) {
                                                     // all directive packages(0xF006)
+                                                    spanLog.getStopwatch().pause();
                                                     ttsService.requestTTSAsync(request, true, null);
-
+                                                    spanLog.getStopwatch().start();
                                                 } else {
                                                     // all directive packages(0xF004)
                                                     // final tts 可能有多条，且多于两条时是multipart形式的metadata和audio
@@ -245,6 +246,7 @@ public class DirectiveProcessor {
         Map<String, String> keysMap = new HashMap<>();
         String cuid = request.getCuid();
         String sn = request.getSn();
+        Log spanLog = logProvider.get(sn);
         log.debug("Processing final TTS for cuid:{} sn:{}", cuid, sn);
         JsonNode jsonTree = JsonUtil.readTree(request.getData().binaryValue());
         JsonNode ttsJsonNode = jsonTree.path(JSON_KEY_TTS);
@@ -258,7 +260,10 @@ public class DirectiveProcessor {
                         keysMap.put(contentId, contentKey);
                     }
                 });
+                spanLog.getStopwatch().pause();
                 Map<String, String> cid_url_mappings = ttsService.requestTTSSync(request, false, keysMap);
+                spanLog.getStopwatch().start();
+                infoLog.info(spanLog.format(String.format("[ASR] Finish to request the final tts:%s", cid_url_mappings)));
                 if (cid_url_mappings != null) {
                     cid_url_mappings.entrySet()
                             .parallelStream()

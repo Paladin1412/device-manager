@@ -8,6 +8,7 @@ import java.util.List;
  *
  * @author <a href="mailto:yaogang AT baidu DOT com">Yao Gang</a>
  */
+@SuppressWarnings("unused")
 public class DCSProxyConstant {
     public static final String JSON_KEY_PARAM = "param";
     public static final String JSON_KEY_VALUE = "value";

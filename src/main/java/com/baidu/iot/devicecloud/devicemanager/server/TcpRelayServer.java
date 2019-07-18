@@ -136,6 +136,7 @@ public class TcpRelayServer {
         }
     }
 
+    @SuppressWarnings("unused")
     public void stop() {
         if (channelFuture != null) {
             try {

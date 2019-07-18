@@ -1,6 +1,7 @@
 package com.baidu.iot.devicecloud.devicemanager.handler.tcp;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
+import com.baidu.iot.devicecloud.devicemanager.config.localserver.TcpRelayServerConfig;
 import com.baidu.iot.devicecloud.devicemanager.constant.ConfirmationStates;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.processor.DirectiveProcessor;
@@ -8,6 +9,7 @@ import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.NettyUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.TlvUtil;
 import com.baidu.iot.log.Log;
+import com.baidu.iot.log.LogProvider;
 import com.baidu.iot.log.Stopwatch;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -22,6 +24,11 @@ import reactor.core.publisher.UnicastProcessor;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.concurrent.Queues;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
+
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.LOGTIME_FORMAT;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CUID;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.SN;
@@ -44,7 +51,8 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     private final UnicastProcessor<TlvMessage> downstreamWorkQueue;
     private final UnicastProcessor<TlvMessage> workQueue;
     private final DirectiveProcessor processor;
-    private final Log spanLog;
+    private Log spanLog;
+    private SimpleDateFormat sdf;
     private Stopwatch stopwatch;
 
     private String cuid = null;
@@ -59,15 +67,15 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
     RelayBackendHandler(Channel downstreamChannel,
                         UnicastProcessor<TlvMessage> downstreamWorkQueue,
                         TtsService ttsService,
-                        Log spanLog) {
+                        TcpRelayServerConfig config) {
         // auto release the received data
         super();
 
         this.downstreamChannel = downstreamChannel;
         this.downstreamWorkQueue = downstreamWorkQueue;
         this.processor = new DirectiveProcessor(ttsService);
-        this.spanLog = spanLog;
-        this.stopwatch = this.spanLog.time("dcs").stop();
+        this.sdf = new SimpleDateFormat(LOGTIME_FORMAT);
+        this.sdf.setTimeZone(TimeZone.getTimeZone(config.getDmTimezone()));
         this.workQueue =
                 UnicastProcessor.create(Queues.<TlvMessage>xs().get());
     }
@@ -79,8 +87,11 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
                 upstreamChannel, msg);
         if (isDownstreamInitPackage(msg)) {
             initialPackageHasArrived = true;
-            this.stopwatch.start();
-            spanLog.count("dcs");
+            this.cuid = upstreamChannel.attr(CUID).get();
+            this.sn = upstreamChannel.attr(SN).get();
+            this.spanLog = LogProvider.getInstance().get(this.sn);
+            this.stopwatch = this.spanLog.time("dcs");
+            this.spanLog.count("dcs");
             infoLog.info("[ASR] Dcs started to response");
             infoLog.info("[ASR] The asr-link relay server inner channel {} has read a message:{}", upstreamChannel, msg);
             if (confirmedConnection(msg)) {
@@ -118,10 +129,11 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
                             log.debug("Elapsed time: {}ms", t.getT1());
                             return Mono.just(t.getT2());
                         })
+                        .doFinally(signalType -> {
+                            spanLog.append("query_end", sdf.format(new Date()));
+                            infoLog.info(spanLog.format("[ASR] Dm finished to response."));
+                        })
                         .subscribe(NettyUtil.good2Go(downstreamChannel).get());
-
-                this.cuid = upstreamChannel.attr(CUID).get();
-                this.sn = upstreamChannel.attr(SN).get();
             } else {
                 upstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.EXCEPTION);
                 downstreamChannel.attr(CONFIRMATION_STATE).set(ConfirmationStates.EXCEPTION);
@@ -145,6 +157,7 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
             if (isDownstreamFinishPackage(msg)) {
                 log.debug("The downstream finish package(0xF004) has come, completing the work queue");
                 workQueue.onComplete();
+                this.stopwatch.pause();
                 infoLog.info(spanLog.format("[ASR] Dcs finished to response."));
             }
             return;

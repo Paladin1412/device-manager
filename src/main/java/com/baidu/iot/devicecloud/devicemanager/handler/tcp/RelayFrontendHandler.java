@@ -38,7 +38,11 @@ import reactor.core.publisher.UnicastProcessor;
 import reactor.util.concurrent.Queues;
 
 import java.net.InetSocketAddress;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.LOGTIME_FORMAT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_BEARER;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_DUEROS_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_PARAM;
@@ -77,11 +81,12 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
 
     private final UnicastProcessor<TlvMessage> workQueue;
 
-    private String cuid;
-    private String sn;
+    private String cuid = null;
+    private String sn = null;
 
-    private Log spanLog;
-    private Stopwatch stopwatch;
+    private Log spanLog = null;
+    private Stopwatch stopwatch = null;
+    private SimpleDateFormat sdf;
 
     public RelayFrontendHandler(AccessTokenService accessTokenService,
                                 TtsService ttsService,
@@ -97,8 +102,9 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
         this.workQueue =
                 UnicastProcessor.create(Queues.<TlvMessage>xs().get());
 
-        this.spanLog = logProvider.get();
-        this.stopwatch = spanLog.time("asr").stop();
+
+        this.sdf = new SimpleDateFormat(LOGTIME_FORMAT);
+        this.sdf.setTimeZone(TimeZone.getTimeZone(config.getDmTimezone()));
     }
 
     @Override
@@ -125,14 +131,16 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
             JsonNode valueNode = decodeAsJson(msg);
             JsonNode paramNode = readParam(valueNode.path(JSON_KEY_PARAM));
             if (paramNode != null) {
+                // cuid and sn wouldn't be empty
                 this.cuid = paramNode.path(JSON_KEY_DUEROS_DEVICE_ID).asText();
                 this.sn = valueNode.path(JSON_KEY_SN).asText();
             }
 
+            spanLog = logProvider.get(sn);
+            stopwatch = spanLog.time("asr");
             spanLog.setCuId(cuid);
-            spanLog.setLogId(sn);
             infoLog.info("[ASR] Asr started");
-            stopwatch.start();
+            spanLog.append("query_start", this.sdf.format(new Date()));
             spanLog.count("asr");
             infoLog.info("[ASR] The asr-link relay channel {} has read a message:{}", inboundChannel, msg);
 
@@ -148,7 +156,7 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
                                     // Inbounds start from below
                                     .addLast("tlvDecoder", new TlvDecoder())
                                     .addLast("idleStateHandler", new IdleStateHandler(config.dmTcpTimeoutIdle, config.dmTcpTimeoutIdle, 0))
-                                    .addLast(new RelayBackendHandler(inboundChannel, workQueue, ttsService, spanLog))
+                                    .addLast(new RelayBackendHandler(inboundChannel, workQueue, ttsService, config))
                                     // Inbounds stop at above
 
                                     // Outbounds stop at below
@@ -213,6 +221,9 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
         clearWorkQueue();
         if (outboundChannel != null) {
             closeOnFlush(outboundChannel);
+        }
+        if (this.spanLog != null) {
+            this.spanLog.remove();
         }
         super.channelInactive(ctx);
     }
