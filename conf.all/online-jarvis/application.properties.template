@@ -14,7 +14,7 @@ dproxy.bns=group.smartbns-from_product=dumi-bdrp-proxy@group.flow-bdrpproxy.dumi
 dproxy.api=
 
 # dcs proxy online
-dcs.proxy.bns=group.flow-dcs-controller.dumi.all
+dcs.proxy.bns=group.smartbns-from_product=dumi-access-controller@group.flow-dcs-controller.dumi.all
 dcs.proxy.api=
 dcs.proxy.address.state=
 dcs.proxy.address.asr=

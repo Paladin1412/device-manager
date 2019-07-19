@@ -291,10 +291,11 @@ public class DirectiveProcessor {
     }
 
     private Flux<Part> parseParts(MultipartStreamDecoder decoder, Flux<TlvMessage> messages) {
-        return Flux.merge(Flux.push(partFluxSink -> messages
+        return messages.flatMap(decoder::decode);
+        /*return Flux.merge(Flux.push(partFluxSink -> messages
                 .doOnNext(tlv -> partFluxSink.next(decoder.decode(tlv)))
                 .doFinally(signalType -> partFluxSink.complete())
-                .subscribe()));
+                .subscribe()));*/
     }
 
     /**
