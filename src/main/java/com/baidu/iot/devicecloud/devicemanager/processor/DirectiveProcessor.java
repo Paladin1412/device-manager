@@ -11,6 +11,7 @@ import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.LogUtils;
 import com.baidu.iot.log.Log;
 import com.baidu.iot.log.LogProvider;
+import com.baidu.iot.log.Stopwatch;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -115,7 +116,7 @@ public class DirectiveProcessor {
     public Flux<TlvMessage> processAsr(String cuid, String sn, Flux<TlvMessage> messages) {
         if (messages != null) {
             Log spanLog = logProvider.get(sn);
-            spanLog.time("multipart");
+            Stopwatch multipartStopwatch = spanLog.time("multipart");
             return messages.groupBy(TlvMessage::getType)
                     .flatMap(group -> {
                         Integer groupKey = group.key();
@@ -179,7 +180,8 @@ public class DirectiveProcessor {
                             }
                         }
                         return Flux.empty();
-                    });
+                    })
+                    .doFinally(signalType -> multipartStopwatch.pause());
         }
         return Flux.empty();
     }
