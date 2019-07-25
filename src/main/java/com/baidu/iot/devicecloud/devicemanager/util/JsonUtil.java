@@ -1,5 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.util;
 
+import com.baidu.iot.devicecloud.devicemanager.bean.Location;
 import com.baidu.iot.devicecloud.devicemanager.config.AppConfiguration;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -185,6 +186,29 @@ public class JsonUtil {
         }
 
         return assembled;
+    }
+
+    public static JsonNode assembleContext(String namespace,
+                                           String name,
+                                           Object payloadObject) {
+        ObjectNode data = createObjectNode();
+        ObjectNode header = createObjectNode();
+
+        header.set(DIRECTIVE_KEY_HEADER_NAMESPACE, TextNode.valueOf(namespace));
+        header.set(DIRECTIVE_KEY_HEADER_NAME, TextNode.valueOf(name));
+
+        data.set(DIRECTIVE_KEY_HEADER, header);
+        data.set(DIRECTIVE_KEY_PAYLOAD, payloadObject == null ? createObjectNode() : objectMapper.valueToTree(payloadObject));
+        return data;
+    }
+
+    public static JsonNode assembleLocationContext(Location location) {
+        if (location == null || location.getLongitude() == null && location.getLatitude() == null || StringUtils.isEmpty(location.getGeoCoordinateSystem())) {
+            return NullNode.getInstance();
+        }
+        return assembleContext("ai.dueros.device_interface.location",
+                "GpsState",
+                location);
     }
 
     public static JsonNode assembleToClientUpdateProgress(JsonNode otaEvent) {

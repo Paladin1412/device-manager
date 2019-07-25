@@ -1,6 +1,8 @@
 package com.baidu.iot.devicecloud.devicemanager.handler.tcp;
 
+import com.baidu.iot.devicecloud.devicemanager.bean.Location;
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
+import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.codec.TlvDecoder;
 import com.baidu.iot.devicecloud.devicemanager.codec.TlvEncoder;
@@ -14,6 +16,7 @@ import com.baidu.iot.log.Log;
 import com.baidu.iot.log.LogProvider;
 import com.baidu.iot.log.Stopwatch;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
 import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.NullNode;
@@ -44,14 +47,19 @@ import java.util.TimeZone;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.LOG_DATETIME_FORMAT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_BEARER;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_CLIENT_CONTEXT;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_CLIENT_IP;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_DUEROS_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_PARAM;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_SN;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.JSON_KEY_VALUE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_AUTHORIZATION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_LINK_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CUID;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.SN;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getDeviceInfoFromRedis;
+import static com.baidu.iot.devicecloud.devicemanager.util.JsonUtil.assembleLocationContext;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.closeOnFlush;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlush;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isUpstreamFinishPackage;
@@ -290,6 +298,26 @@ public class RelayFrontendHandler extends SimpleChannelInboundHandler<TlvMessage
             if (!paramNode.has(PAM_PARAM_LINK_VERSION)) {
                 paramNode.set(PAM_PARAM_LINK_VERSION, IntNode.valueOf(2));
             }
+
+            // append location context
+            DeviceResource deviceResource = getDeviceInfoFromRedis(cuid);
+            if (deviceResource != null) {
+                Location l = new Location(deviceResource.getLongitude(), deviceResource.getLatitude(), deviceResource.getGeoCoordinateSystem());
+                JsonNode lc = assembleLocationContext(l);
+                if (!lc.isNull()) {
+                    ObjectNode v = paramNode.has(JSON_KEY_VALUE) && paramNode.get(JSON_KEY_VALUE).isObject() ? (ObjectNode) paramNode.get(JSON_KEY_VALUE) : JsonUtil.createObjectNode();
+                    ArrayNode clientContext = v.has(DIRECTIVE_KEY_CLIENT_CONTEXT) && v.get(DIRECTIVE_KEY_CLIENT_CONTEXT).isArray() ? (ArrayNode) v.get(DIRECTIVE_KEY_CLIENT_CONTEXT) : JsonUtil.createArrayNode();
+                    clientContext.add(lc);
+                    v.set(DIRECTIVE_KEY_CLIENT_CONTEXT, clientContext);
+                    paramNode.set(JSON_KEY_VALUE, v);
+                }
+                String pamIp = valueNode.path(JSON_KEY_CLIENT_IP).asText();
+                String authIp = deviceResource.getIp();
+                if (StringUtils.hasText(authIp) && !authIp.equalsIgnoreCase(pamIp)) {
+                    valueNode.set(JSON_KEY_CLIENT_IP, TextNode.valueOf(authIp));
+                }
+            }
+
             valueNode.set(JSON_KEY_PARAM, TextNode.valueOf(JsonUtil.serialize(paramNode)));
 
             BinaryNode valueBinUpdated = BinaryNode.valueOf(JsonUtil.writeAsBytes(valueNode));
