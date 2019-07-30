@@ -1,5 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager;
 
+import com.baidu.iot.devicecloud.devicemanager.bean.AuthorizationMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.ttsproxyclient.bean.TtsRequest;
@@ -26,6 +27,8 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Stream;
+
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deleteTokenFromRedis;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest
@@ -99,6 +102,40 @@ public class DeviceManagerApplicationTests {
         System.out.println(Arrays.toString(items));
     }
 
+	private String otaEvents = "2019-06-11 17:50:12 {\"description\":null,\"event\":4,\"percent\":0.201099,\"transaction\":\"1472892\"}\n2019-06-11 17:50:11 {\"description\":null,\"event\":4,\"percent\":0.10189,\"transaction\":\"1472892\"}\n2019-06-11 17:50:08 {\"description\":\"Creater Updater success\",\"event\":0,\"transaction\":\"1472892\"}";
+
+	private ArrayNode orderedEvents(String otaEvents) {
+		String[] eventItems = StringUtils.delimitedListToStringArray(otaEvents, "\n");
+		ArrayNode result = JsonUtil.createArrayNode();
+		Stream.of(eventItems)
+				.map(e -> {
+					String[] items = e.split(" ", 3);
+					if (items.length > 2) {
+						System.out.println(items[2]);
+						return JsonUtil.readTree(items[2]);
+					}
+					return JsonUtil.createObjectNode();
+				})
+				.sorted((j1, j2) -> {
+					double diff = j1.path("event").asInt(0) - j2.path("event").asInt(0) + (j1.path("percent").asDouble(0) - j2.path("percent").asDouble(0));
+					if (diff < 0) {
+						return -1;
+					}
+					if (diff > 0) {
+						return 1;
+					}
+					return 0;
+				})
+				.forEach(result::add);
+		return result;
+	}
+
+	@Test
+	public void test() {
+		ArrayNode arrayNode = orderedEvents(otaEvents);
+		System.out.println(arrayNode);
+	}
+
 	@Test
 	public void testAt() {
 		String at = accessTokenService.getAccessToken("02a300000000ac", "test123");
@@ -133,39 +170,5 @@ public class DeviceManagerApplicationTests {
 	public void testClear() throws InterruptedException {
 		HttpUtil.deleteSessionFromRedis("0285000000001d");
 		Thread.sleep(1000);
-	}
-
-	private String otaEvents = "2019-06-11 17:50:12 {\"description\":null,\"event\":4,\"percent\":0.201099,\"transaction\":\"1472892\"}\n2019-06-11 17:50:11 {\"description\":null,\"event\":4,\"percent\":0.10189,\"transaction\":\"1472892\"}\n2019-06-11 17:50:08 {\"description\":\"Creater Updater success\",\"event\":0,\"transaction\":\"1472892\"}";
-
-	private ArrayNode orderedEvents(String otaEvents) {
-		String[] eventItems = StringUtils.delimitedListToStringArray(otaEvents, "\n");
-		ArrayNode result = JsonUtil.createArrayNode();
-		Stream.of(eventItems)
-				.map(e -> {
-					String[] items = e.split(" ", 3);
-					if (items.length > 2) {
-						System.out.println(items[2]);
-						return JsonUtil.readTree(items[2]);
-					}
-					return JsonUtil.createObjectNode();
-				})
-				.sorted((j1, j2) -> {
-					double diff = j1.path("event").asInt(0) - j2.path("event").asInt(0) + (j1.path("percent").asDouble(0) - j2.path("percent").asDouble(0));
-					if (diff < 0) {
-						return -1;
-					}
-					if (diff > 0) {
-						return 1;
-					}
-					return 0;
-				})
-				.forEach(result::add);
-		return result;
-	}
-
-	@Test
-	public void test() {
-		ArrayNode arrayNode = orderedEvents(otaEvents);
-		System.out.println(arrayNode);
 	}
 }
