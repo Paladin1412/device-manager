@@ -5,12 +5,18 @@ import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.InteractiveOnlineRequest;
 import com.baidu.iot.devicecloud.devicemanager.bean.OtaMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
+import com.baidu.iot.devicecloud.devicemanager.client.http.dlpclient.builder.DlpToDcsBuilder;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dlpclient.builder.PrivateDlpBuilder;
+import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
+import com.baidu.iot.devicecloud.devicemanager.processor.EventProcessor;
 import com.baidu.iot.devicecloud.devicemanager.service.DlpService;
+import com.baidu.iot.devicecloud.devicemanager.service.LocationService;
 import com.baidu.iot.devicecloud.devicemanager.service.OtaService;
 import com.baidu.iot.devicecloud.devicemanager.service.PushService;
+import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -38,6 +44,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_DIRECTIVE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_DLP;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_PRIVATE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.PRIVATE_PROTOCOL_DIALOGUE_FINISHED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.PRIVATE_PROTOCOL_NAMESPACE;
 import static com.baidu.iot.devicecloud.devicemanager.util.DirectiveUtil.assembleDuerPrivateDirective;
@@ -45,6 +52,7 @@ import static com.baidu.iot.devicecloud.devicemanager.util.DirectiveUtil.assembl
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deviceMayNotOnline;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getDeviceInfoFromRedis;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getFirst;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/6/11.
@@ -57,12 +65,20 @@ public class DlpHandler {
     private final DlpService dlpService;
     private final PushService pushService;
     private final OtaService otaService;
+    private final LocationService locationService;
+    private final EventProcessor eventProcessor;
 
     @Autowired
-    public DlpHandler(DlpService dlpService, PushService pushService, OtaService otaService) {
+    public DlpHandler(DlpService dlpService,
+                      PushService pushService,
+                      OtaService otaService,
+                      LocationService locationService,
+                      EventProcessor eventProcessor) {
         this.dlpService = dlpService;
         this.pushService = pushService;
         this.otaService = otaService;
+        this.locationService = locationService;
+        this.eventProcessor = eventProcessor;
     }
 
     /**
@@ -92,20 +108,38 @@ public class DlpHandler {
                                         return otaService.deal(deviceId, name, toServer);
                                     }
                                     case "dlp.location": {
-                                        break;
+                                        return locationService.deal(deviceId, name, toServer);
                                     }
                                     default: {
-                                        JsonNode parsed = Adapter.dlp2Dcs(jsonNode, null);
+                                        JsonNode parsed;
+                                        DlpToDcsBuilder dlpToDcsBuilder = dlpService.buildDcsJson(jsonNode, deviceId);
+                                        if (dlpToDcsBuilder != null) {
+                                            parsed = dlpToDcsBuilder.getData();
+                                        } else {
+                                            parsed = Adapter.dlp2Dcs(jsonNode);
+                                        }
                                         if (!parsed.isNull()) {
                                             String messageId = parsed.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_HEADER).path(DIRECTIVE_KEY_HEADER_MESSAGE_ID).asText("");
                                             DeviceResource deviceResource = getDeviceInfoFromRedis(deviceId);
                                             if (deviceResource != null && StringUtils.hasText(deviceResource.getCltId())) {
-                                                DataPointMessage assembled = Adapter.directive2DataPoint(parsed, DATA_POINT_DUER_DLP, null);
-                                                assembled.setCltId(deviceResource.getCltId());
-                                                assembled.setDeviceId(deviceId);
-                                                assembled.setLogId(messageId);
-                                                pushService.justPush(assembled);
-                                                return ServerResponse.ok().build();
+                                                if(parsed.has(DIRECTIVE_KEY_DIRECTIVE)) {
+                                                    // push directives
+                                                    DataPointMessage assembled = Adapter.directive2DataPoint(parsed, DATA_POINT_DUER_DLP, null);
+                                                    assembled.setCltId(deviceResource.getCltId());
+                                                    assembled.setDeviceId(deviceId);
+                                                    assembled.setLogId(messageId);
+                                                    pushService.justPush(assembled);
+                                                    return ServerResponse.ok().build();
+                                                } else {
+                                                    // report events to dcs and push respond directives
+                                                    DataPointMessage event = assembleMessage(deviceResource, parsed, logId);
+                                                    String ua = getFirst(request, HttpHeaderNames.USER_AGENT.toString());
+                                                    if (StringUtils.hasText(ua)) {
+                                                        event.setUserAgent(ua);
+                                                    }
+                                                    event.setSn(toServer.path("uuid").asText(logId));
+                                                    return ServerResponse.ok().body(eventProcessor.process(event), Object.class);
+                                                }
                                             }
                                         }
                                         return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(BodyInserters.fromObject(failedResponses.apply(logId, "Adapting dlp to dcs failed")));
@@ -220,5 +254,19 @@ public class DlpHandler {
             );
         }
         return deviceMayNotOnline.get().apply(deviceUuid);
+    }
+
+    private DataPointMessage assembleMessage(DeviceResource deviceResource, JsonNode payload, String logId) {
+        DataPointMessage message = new DataPointMessage();
+        message.setDeviceId(deviceResource.getCuid());
+        message.setLogId(logId);
+        message.setCltId(deviceResource.getCltId());
+        message.setId(IdGenerator.nextId());
+        message.setVersion(DEFAULT_VERSION);
+        message.setPayload(payload.toString());
+        message.setDeviceIp(deviceResource.getIp());
+        message.setDevicePort(deviceResource.getPort());
+        message.setMessageType(MessageType.DATA_POINT);
+        return message;
     }
 }

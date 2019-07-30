@@ -135,6 +135,7 @@ public class DCSProxyConstant {
     public static String DLP_OTA_NAMESPACE = DLP_DCS_NAMESPACE_PREFIX + "dlp.system_update";
     public static String DLP_OTA_UPDATE = "Update";
     public static String DLP_OTA_UPDATE_PROGRESS = "GetUpdateProgressStatus";
+    public static String DLP_LOCATION_SET_LOCATION = "SetLocation";
 
     // VoiceOutput
     public static String VOICE_OUTPUT_NAMESPACE  = DLP_DCS_NAMESPACE_PREFIX + "voice_output";

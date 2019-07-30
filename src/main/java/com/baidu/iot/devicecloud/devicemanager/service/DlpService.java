@@ -4,7 +4,6 @@ import com.baidu.iot.devicecloud.devicemanager.bean.InteractiveType;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dlpclient.DlpClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dlpclient.builder.DlpToDcsBuilder;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
-import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -79,28 +78,27 @@ public class DlpService implements InitializingBean {
         }
     }
 
-    public DlpToDcsBuilder buildDcsJson(String data, String deviceUuid) {
+    public DlpToDcsBuilder buildDcsJson(JsonNode jsonData, String deviceUuid) {
         try {
-            JsonNode jsonData = JsonUtil.readTree(data);
             if (!jsonData.has("to_server")) {
                 return null;
             }
-            jsonData = jsonData.path("to_server");
+            JsonNode toServer = jsonData.path("to_server");
 
             JsonNode clientContext = null;
-            if (jsonData.has("clientContext")) {
-                clientContext = jsonData.path("clientContext");
+            if (toServer.has("clientContext")) {
+                clientContext = toServer.path("clientContext");
             }
             log.debug("dlp clientContext={}", clientContext);
 
-            String name = jsonData.path("header").path("name").asText("");
+            String name = toServer.path("header").path("name").asText("");
             String namespace = DLP_DCS_NAMESPACE_PREFIX;
             DlpToDcsBuilder builder = new DlpToDcsBuilder();
             switch (name) {
                 case "LinkClicked":
                     builder.writeEvent();
                     namespace += "screen";
-                    String token = jsonData.path("payload").path("token").asText();
+                    String token = toServer.path("payload").path("token").asText();
                     builder.setClientContext(namespace, "ViewState", token);
                     break;
                 case "ButtonClicked":
@@ -129,8 +127,8 @@ public class DlpService implements InitializingBean {
                 default:
                     return null;
             }
-            builder.payload(jsonData.get("payload"))
-                    .header(jsonData.get("header"), namespace);
+            builder.payload(toServer.get("payload"))
+                    .header(toServer.get("header"), namespace);
             log.debug("stream device={}, data={}", deviceUuid, builder.getData());
             return builder;
 
