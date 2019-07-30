@@ -33,8 +33,8 @@ public class RelayBackendHandler extends SimpleChannelInboundHandler<TlvMessage>
      */
     private boolean initialPackageHasArrived;
 
-    RelayBackendHandler(UnicastProcessor<TlvMessage> requestQueue,
-                        UnicastProcessor<TlvMessage> responseQueue) {
+    public RelayBackendHandler(UnicastProcessor<TlvMessage> requestQueue,
+                               UnicastProcessor<TlvMessage> responseQueue) {
         // auto release the received data
         super();
 
