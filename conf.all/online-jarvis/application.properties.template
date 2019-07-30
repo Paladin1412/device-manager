@@ -6,12 +6,15 @@ di.api=
 di.url=http://api-iot.baidu-int.com/for-di
 #di.url=http://127.0.0.1:8998
 
+paas.api.url=http://api-iot.baidu-int.com/for-api
+dlp.connect.proxy.api=http://api-iot.baidu-int.com/for-orp-dp
+
 # dproxy online
 dproxy.bns=group.smartbns-from_product=dumi-bdrp-proxy@group.flow-bdrpproxy.dumi.all:main
 dproxy.api=
 
 # dcs proxy online
-dcs.proxy.bns=group.flow-dcs-controller.dumi.all
+dcs.proxy.bns=group.smartbns-from_product=dumi-access-controller@group.flow-dcs-controller.dumi.all
 dcs.proxy.api=
 dcs.proxy.address.state=
 dcs.proxy.address.asr=
@@ -21,10 +24,46 @@ tts.proxy.bns=group.ttsproxy-jarvis-online.IOT.all
 tts.proxy.api=
 #tts.proxy.api=127.0.0.1:8099
 
-dh.bns=unknown_bns_dh
+dh.bns=dh2.audio.hb
 dh.api=10.211.245.46:8206
 
 local.server.port=
 local.server.bns=
 
 logging.config=$EM_APP_HOME/conf/logback.xml
+
+#bigpipe cluster
+bigpipe.clustername=bigpipe_sh_cluster
+
+#test url
+bigpipe.zookeeper.url=sh01-tm-zookeeper.dmop.baidu.com:2181
+bigpipe.zookeeper.timeout=20000
+
+# bigpipe pipe
+bigpipe.pipename=iotpaas-online-pipe
+bigpipe.username=iot-paas-bigpipe
+bigpipe.password=iotpaas@2015
+
+# pipelet writers map & init pipelet writers
+bigpipe.msg.pipelet.map=USER:9,10|DATA:1,2,4,5,6,7,8|HEARTBEAT:1,2,4,5,6,7,8|DEFAULT:1,2,4,5,6,7,8
+# init max writers per pipe
+bigpipe.client.number.per.pipe=30
+
+#bigpipe cluster
+grey.bigpipe.clustername=bigpipe_bws_cluster
+
+#test url
+grey.bigpipe.zookeeper.url=zk-bigpipe-proxy.dmop.baidu.com:2181
+grey.bigpipe.zookeeper.timeout=20000
+
+# bigpipe pipe
+grey.bigpipe.pipename=iotpaas-bws-pipe
+grey.bigpipe.username=iotpaas
+grey.bigpipe.password=iotpaaspwd
+
+# pipelet writers map & init pipelet writers
+grey.bigpipe.msg.pipelet.map=DATA:6|HEARTBEAT:6|DEFAULT:6
+# init max writers per pipe
+grey.bigpipe.client.number.per.pipe=5
+
+grey.conf.bns_group=group.duer-peggy-online-conf.IOT.all

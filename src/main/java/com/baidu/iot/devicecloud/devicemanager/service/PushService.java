@@ -6,14 +6,23 @@ import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.LocalServerInfo;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dhclient.DhClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.redirectclient.RedirectClient;
+import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.LogUtils;
+import com.baidu.iot.log.Log;
+import com.baidu.iot.log.LogProvider;
+import com.baidu.iot.log.Stopwatch;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.Response;
 import okhttp3.ResponseBody;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,9 +37,14 @@ import reactor.util.concurrent.Queues;
 import java.time.Duration;
 import java.util.List;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_NEED;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_SECRET_KEY;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.failedResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.isCoapOk;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponse;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponseFromDP;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponsesWithMessage;
 
 /**
@@ -41,6 +55,9 @@ import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successRespo
 @Slf4j
 @Component
 public class PushService implements InitializingBean {
+    private static final Logger infoLog = LoggerFactory.getLogger("infoLog");
+    private static final LogProvider logProvider = LogProvider.getInstance();
+
     private final DhClient client;
     private final RedirectClient redirectClient;
     private final SecurityService securityService;
@@ -88,7 +105,11 @@ public class PushService implements InitializingBean {
     }
 
     public void unPool(String key) {
+        UnicastProcessor<DataPointMessage> signal = pooledMonoSignals.getIfPresent(key);
         pooledMonoSignals.invalidate(key);
+        if (signal != null) {
+            signal.dispose();
+        }
     }
 
     public void advice(String key, DataPointMessage message) {
@@ -99,7 +120,8 @@ public class PushService implements InitializingBean {
         if (items != null && items.length >= 5) {
             String ip = items[2];
             String port = items[3];
-            if (localServerInfo.getLocalServerIp().equalsIgnoreCase(ip)) {
+            if (localServerInfo.getLocalServerIp().equalsIgnoreCase(ip) &&
+            Integer.toString(LocalServerInfo.localServerPort).equalsIgnoreCase(port)) {
                 UnicastProcessor<DataPointMessage> signal = pooledMonoSignals.getIfPresent(key);
                 if (signal != null && !signal.isDisposed()) {
                     signal.onNext(message);
@@ -122,22 +144,70 @@ public class PushService implements InitializingBean {
     }
 
     public Mono<BaseResponse> push(DataPointMessage message) {
-        //noinspection BlockingMethodInNonBlockingContext
-        try(Response response = this.client.pushMessage(message)) {
-            if (response != null && response.isSuccessful()) {
-                if (log.isDebugEnabled()) {
-                    ResponseBody body = response.body();
-                    if (body != null) {
-                        //noinspection BlockingMethodInNonBlockingContext
-                        log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(body.bytes())));
-                    }
-                }
-                return Mono.just(successResponsesWithMessage.apply(message));
-            }
-        } catch (Exception e) {
-            log.error("Pushing dh failed", e);
+        Log spanLog = logProvider.get(message.getLogId());
+        spanLog.setCuId(message.getDeviceId());
+        Stopwatch stopwatch = spanLog.time("dh2");
+        String logId = spanLog.getLogId();
+        return Mono.fromFuture(
+                this.client.pushMessageAsync(message)
+                .handleAsync(
+                        (r, t) -> {
+                            stopwatch.pause();
+                            try(ResponseBody body = r.body()) {
+                                if (body != null) {
+                                    byte[] bytes = body.bytes();
+                                    log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(bytes)));
+
+                                    JsonNode bodyNode = JsonUtil.readTree(bytes);
+                                    infoLog.info(spanLog.format(String.format("DH response:%s", bodyNode.toString())));
+                                    if (!bodyNode.isNull()) {
+                                        int err_no = bodyNode.path("err_no").asInt(-1);
+                                        String err_msg = bodyNode.path("error").asText("");
+                                        if (err_no == MESSAGE_SUCCESS_CODE) {
+                                            return successResponse.apply(logId, err_msg);
+                                        } else {
+                                            failedResponses.apply(logId, err_msg);
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                log.error("Pushing dh failed", e);
+                                return failedResponses.apply(logId, e.getMessage());
+                            } finally {
+                                logProvider.revoke(logId);
+                            }
+                            return failedResponses.apply(logId, "Pushing dh failed");
+                        }
+                )
+        );
+    }
+
+    public void justPush(DataPointMessage message) {
+        this.client.pushMessageAsync(message)
+                .handleAsync(
+                        (r, t) -> {
+                            try(ResponseBody body = r.body()) {
+                                if (log.isDebugEnabled() && r.isSuccessful() && body != null) {
+                                    log.debug("DH response:\n{}", ByteBufUtil.prettyHexDump(Unpooled.wrappedBuffer(body.bytes())));
+                                }
+                            } catch (Exception e) {
+                                log.error("Pushing dh failed", e);
+                            }
+                            return null;
+                        }
+                );
+    }
+
+    public void prepareAckPush(DataPointMessage assembled) {
+        if (assembled != null && StringUtils.hasText(assembled.getCltId()) && StringUtils.hasText(assembled.getDeviceId())) {
+            assembled.setNeedAck(true);
+            String key = pool(assembled);
+            assembled.setKey(key);
+            ObjectNode misc = JsonUtil.createObjectNode();
+            misc.set(MESSAGE_ACK_NEED, BooleanNode.getTrue());
+            misc.set(MESSAGE_ACK_SECRET_KEY, TextNode.valueOf(key));
+            assembled.setMisc(misc.toString());
         }
-        return Mono.just(failedResponses.apply(message.getLogId(), "Pushing dh failed"));
     }
 
     public Mono<BaseResponse> check(BaseMessage message, String key, List<Integer> stub) {
@@ -145,7 +215,7 @@ public class PushService implements InitializingBean {
             return Mono.just(successResponsesWithMessage.apply(message));
         }
         UnicastProcessor<DataPointMessage> signal = pooledMonoSignals.getIfPresent(key);
-        if (signal == null) {
+        if (signal == null || signal.isDisposed()) {
             return Mono.just(failedResponses.apply(message.getLogId(), "No signal"));
         }
 
@@ -159,7 +229,7 @@ public class PushService implements InitializingBean {
                         stub.removeIf(i -> i == id);
                     }
                     if (stub.isEmpty()) {
-                        sink.success(successResponsesWithMessage.apply(message));
+                        sink.success(successResponseFromDP.apply(message.getLogId(), ack));
                         signal.cancel();
                     }
                 }

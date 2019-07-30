@@ -1,5 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.bean;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
@@ -24,4 +25,7 @@ public class DataPointMessage extends BaseMessage {
     private String query;
     private String payload;
     private String misc;
+
+    @JsonIgnore
+    private String key;
 }

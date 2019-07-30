@@ -4,7 +4,6 @@ import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.Response;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,8 +12,6 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-
-import java.util.concurrent.CompletableFuture;
 
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 
@@ -69,9 +66,9 @@ public class DproxyClientProvider implements InitializingBean {
     }
 
     @Retryable(value = {RetryException.class}, backoff = @Backoff(200))
-    public CompletableFuture<Response> setexAsync(String key, long seconds, Object value) {
+    public void setexAsync(String key, long seconds, Object value) {
         if (seconds == 0) {
-            return null;
+            return;
         }
         DproxyRequest request;
         if (seconds < 0) {
@@ -80,11 +77,10 @@ public class DproxyClientProvider implements InitializingBean {
             request = new DproxyRequest("SETEX", prefix + key, seconds, value);
         }
         try {
-            return dproxyClient.sendCommandAsync(request).handleAsync(
+            dproxyClient.sendCommandAsync(request).handleAsync(
                     (r, t) -> {
                         try {
                             if (!r.isSuccessful()) {
-                                close(r);
                                 throw new RetryException("Retry");
                             }
                             return r;
@@ -94,9 +90,11 @@ public class DproxyClientProvider implements InitializingBean {
                     }
             );
         } catch (Exception e) {
+            if (e instanceof RetryException) {
+                throw e;
+            }
             // pass
             log.warn("dproxy setex {} failed, {}", key, e);
-            return null;
         }
     }
 
@@ -146,7 +144,7 @@ public class DproxyClientProvider implements InitializingBean {
         }
     }
 
-    private boolean expire(String key, long expire) {
+    public boolean expire(String key, long expire) {
         boolean ok = false;
         if (StringUtils.isEmpty(key)) {
             return false;
@@ -189,26 +187,70 @@ public class DproxyClientProvider implements InitializingBean {
         return ok;
     }
 
+    public boolean exists(String key, String hKey) {
+        DproxyResponse response;
+        boolean ok = false;
+        DproxyRequest request = new DproxyRequest("HEXISTS", prefix + key, hKey);
+        try {
+            response = getConnection(request);
+            if (null != response) {
+                log.info("dproxy hexists res={}", response.getRes());
+                Object res = response.getRes();
+                ok = res instanceof Number && (Integer) res == 1;
+            }
+        } catch (Exception e) {
+            // pass
+            log.warn("dproxy hexists {} failed", key);
+        }
+        return ok;
+    }
+
     public String get(String key) {
         return get(key, String.class);
     }
 
     public boolean hset(String key, long seconds, String hKey, Object value) {
-        if (seconds == 0) {
-            return false;
-        }
         try {
             DproxyRequest request = new DproxyRequest("HSET", prefix + key, hKey, value);
             DproxyResponse response = getConnection(request);
             if (response != null && response.getStatus() == 0) {
-                log.debug("hset successfully res={}", response.getRes());
-                return expire(key, seconds);
+                log.debug("hset successfully. key={}, hKey={}", key, hKey);
+                if (seconds > 0) {
+                    return expire(key, seconds);
+                }
+                return true;
             }
         } catch (Exception e) {
             // pass
             log.warn("redis hset {} failed", key);
         }
         return false;
+    }
+
+    public void hset(String key, String hKey, Object value) {
+        try {
+            DproxyRequest request = new DproxyRequest("HSET", prefix + key, hKey, value);
+            DproxyResponse response = getConnection(request);
+            if (response != null && response.getStatus() == 0) {
+                log.debug("hset successfully res={}", response.getRes());
+            }
+        } catch (Exception e) {
+            // pass
+            log.warn("redis hset {} failed", key);
+        }
+    }
+
+    public void hdel(String key, String hKey) {
+        try {
+            DproxyRequest request = new DproxyRequest("HDEL", prefix + key, hKey);
+            DproxyResponse response = getConnection(request);
+            if (response != null && response.getStatus() == 0) {
+                log.debug("hdel successfully. key={}, hKey={}, res={}", key, hKey, response.getRes());
+            }
+        } catch (Exception e) {
+            // pass
+            log.warn("redis hdel {} failed", key);
+        }
     }
 
     public <T> T hget(String key, String hKey, Class<T> type) {

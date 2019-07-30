@@ -1,6 +1,5 @@
 package com.baidu.iot.devicecloud.devicemanager.service.handler;
 
-import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.service.PushService;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
@@ -11,12 +10,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 
-import java.util.Optional;
-
+import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_NOT_IMPLEMENTED;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_NEED;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_ACK_SECRET_KEY;
-import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS_CODE_DH2;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.successResponse;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DATA_POINT_DUER_ACK;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.transformedDataPointResponses;
 
 /**
  * Created by Yao Gang (yaogang@baidu.com) on 2019/4/24.
@@ -35,21 +34,16 @@ public class DataPointAdviceHandler extends AbstractLinkableDataPointHandler {
 
     @Override
     boolean canHandle(String type) {
-        return true;
+        return DATA_POINT_DUER_ACK.equalsIgnoreCase(type);
     }
 
     @Override
     Mono<Object> work(DataPointMessage message) {
-        try2Advice(message);
-        BaseResponse response = successResponse.apply(
-                Optional.ofNullable(message.getLogId()).orElseGet(() -> Integer.toString(message.getId())),
-                "This message will be just discarded."
-        );
-        response.setStatus(MESSAGE_SUCCESS_CODE_DH2);
-        return Mono.just(response);
+        boolean flag = try2Advice(message);
+        return Mono.just(transformedDataPointResponses(message, flag ? COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID : COAP_RESPONSE_CODE_DUER_MSG_RSP_NOT_IMPLEMENTED));
     }
 
-    private void try2Advice(DataPointMessage message) {
+    private boolean try2Advice(DataPointMessage message) {
         try {
             if (message != null && StringUtils.hasText(message.getMisc())) {
                 String misc = message.getMisc();
@@ -65,11 +59,14 @@ public class DataPointAdviceHandler extends AbstractLinkableDataPointHandler {
                     String secretKey = miscNode.path(MESSAGE_ACK_SECRET_KEY).asText();
                     if (needAck && StringUtils.hasText(secretKey)) {
                         pushService.advice(secretKey, message);
-                        log.debug("The advice has been submitted successfully.");
+                        log.debug("The advice has been submitted successfully. secretKey:{}", secretKey);
+                        return true;
                     }
                 }
             }
         } catch (Exception ignore) {
         }
+        log.debug("Submitting this ack has failed.");
+        return false;
     }
 }

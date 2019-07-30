@@ -8,6 +8,10 @@ import com.baidu.iot.devicecloud.devicemanager.util.IdGenerator;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Charsets;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MultipartBody;
@@ -22,13 +26,22 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.PARAMETER_METADATA;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_CLIENT_CONTEXT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DIRECTIVE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DLP_PAYLOAD;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_DLP_UUID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_EVENT;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_DIALOG_ID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_DLP_REQUEST_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_MESSAGE_ID;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_NAME;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_HEADER_NAMESPACE;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_KEY_PAYLOAD;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DIRECTIVE_NAMESPACE_PREFIX;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DCSProxyConstant.DLP_DCS_NAMESPACE_PREFIX;
 import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.DEFAULT_VERSION;
-import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.PRIVATE_PROTOCOL_DIALOGUE_FINISHED;
-import static com.baidu.iot.devicecloud.devicemanager.util.DirectiveUtil.assembleDuerPrivateDirective;
+import static com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant.PRIVATE_PROTOCOL_NAMESPACE;
 import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isLegalType;
 
 /**
@@ -85,36 +98,11 @@ public class Adapter {
 
     }
 
-    public static List<TlvMessage> directive2DataPointTLV(List<JsonNode> directives, int type) {
-        if (directives == null || directives.size() < 1 || !isLegalType(type)) {
-            return Collections.emptyList();
-        }
-
-        // try to append DialogueFinished
-        try2appendDialogueFinished(directives);
-
-        return directives
-                .stream()
-                .map(
-                        node -> directive2DataPointTLV(node, type)
-                )
-                .collect(Collectors.toList());
-    }
-    public static List<DataPointMessage> directive2DataPoint(List<JsonNode> directives, DataPointMessage origin) {
-        if (directives == null || directives.size() < 1 || origin == null) {
-            return Collections.emptyList();
-        }
-
-        // try to append DialogueFinished
-        try2appendDialogueFinished(directives);
-
-        return directives
-                .stream()
-                .map(node -> directive2DataPoint(node, origin))
-                .collect(Collectors.toList());
-    }
-
     public static DataPointMessage directive2DataPoint(JsonNode directive, DataPointMessage origin) {
+        return directive2DataPoint(directive, DataPointConstant.DATA_POINT_DUER_DIRECTIVE, origin);
+    }
+
+    public static DataPointMessage directive2DataPoint(JsonNode directive, String path, DataPointMessage origin) {
         DataPointMessage assembled = new DataPointMessage();
         Optional.ofNullable(origin).ifPresent(
                 dp -> BeanUtils.copyProperties(origin, assembled)
@@ -122,26 +110,74 @@ public class Adapter {
         assembled.setVersion(origin != null ? origin.getVersion() : DEFAULT_VERSION);
         assembled.setId(origin != null ? origin.getId() : IdGenerator.nextId());
         assembled.setCode(CoapConstant.COAP_METHOD_PUT);
-        assembled.setPath(PathUtil.lookAfterPrefix(DataPointConstant.DATA_POINT_DUER_DIRECTIVE));
+        assembled.setPath(PathUtil.lookAfterPrefix(path));
         assembled.setPayload(JsonUtil.serialize(directive));
 
         return assembled;
     }
 
-    public static void try2appendDialogueFinished(List<JsonNode> directives) {
-        try {
-            // obtain dialogueRequestId from first directive
-            JsonNode first = directives.get(0);
-            JsonNode header = first.path(DIRECTIVE_KEY_DIRECTIVE).path(DIRECTIVE_KEY_HEADER);
-            String dialogueRequestId = header.path(DIRECTIVE_KEY_HEADER_DIALOG_ID).asText();
-            directives.add(assembleDuerPrivateDirective(
-                    PRIVATE_PROTOCOL_DIALOGUE_FINISHED,
-                    dialogueRequestId,
-                    header.path(DIRECTIVE_KEY_HEADER_MESSAGE_ID).asText(),
-                    directives.size() + 1
-            ));
-        } catch (Exception e) {
-            log.error("Trying to append DialogueFinished at last failed", e);
+    public static JsonNode dlp2Dcs(JsonNode dlp) {
+        if (dlp != null) {
+            if (dlp.has("to_server")) {
+                JsonNode toServer = dlp.path("to_server");
+                String dlpUuid = toServer.path("uuid").asText();
+                return dlp2Dcs0(toServer, dlpUuid);
+            } else if (dlp.has("to_client")) {
+                return dlp2Dcs0(dlp.path("to_client"), null);
+            }
+        }
+        return NullNode.getInstance();
+    }
+
+    private static JsonNode dlp2Dcs0(JsonNode dlp, String dlpUuid) {
+        ObjectNode assembled = JsonUtil.createObjectNode();
+        ObjectNode data = JsonUtil.createObjectNode();
+        ObjectNode header = JsonUtil.createObjectNode();
+        ObjectNode payload = JsonUtil.createObjectNode();
+        JsonNode headerNode = dlp.path(DIRECTIVE_KEY_HEADER);
+        String namespace = headerNode.path(DIRECTIVE_KEY_HEADER_NAMESPACE).asText();
+        String name = headerNode.path(DIRECTIVE_KEY_HEADER_NAME).asText();
+        if (StringUtils.hasText(namespace)) {
+            header.set(DIRECTIVE_KEY_HEADER_NAMESPACE, TextNode.valueOf(PRIVATE_PROTOCOL_NAMESPACE.equalsIgnoreCase(namespace) ? namespace : DLP_DCS_NAMESPACE_PREFIX + namespace));
+            header.set(DIRECTIVE_KEY_HEADER_NAME, headerNode.path(DIRECTIVE_KEY_HEADER_NAME));
+            header.set(DIRECTIVE_KEY_HEADER_MESSAGE_ID, headerNode.path(DIRECTIVE_KEY_HEADER_MESSAGE_ID));
+            payload.set(DIRECTIVE_KEY_DLP_PAYLOAD, dlp.path(DIRECTIVE_KEY_PAYLOAD));
+            if (StringUtils.hasText(headerNode.path(DIRECTIVE_KEY_HEADER_DIALOG_ID).asText())) {
+                payload.set(DIRECTIVE_KEY_HEADER_DLP_REQUEST_ID, headerNode.path(DIRECTIVE_KEY_HEADER_DIALOG_ID));
+            }
+            if (StringUtils.hasText(dlpUuid)) {
+                payload.set(DIRECTIVE_KEY_DLP_UUID, TextNode.valueOf(dlpUuid));
+            }
+            data.set(DIRECTIVE_KEY_HEADER, header);
+            data.set(DIRECTIVE_KEY_PAYLOAD, payload);
+            if (dlp.has(DIRECTIVE_KEY_CLIENT_CONTEXT)) {
+                try {
+                    ObjectNode dlpClientContext = (ObjectNode) dlp.path(DIRECTIVE_KEY_CLIENT_CONTEXT);
+                    String clientContextNamespace = dlpClientContext.path(DIRECTIVE_KEY_HEADER).path(DIRECTIVE_KEY_HEADER_NAMESPACE).asText()
+                            .replaceFirst("dlp", DIRECTIVE_NAMESPACE_PREFIX);
+                    dlpClientContext.set(DIRECTIVE_KEY_HEADER_NAMESPACE, TextNode.valueOf(clientContextNamespace));
+                    ArrayNode dcsClientContext = JsonUtil.createArrayNode();
+                    dcsClientContext.add(dlpClientContext);
+                    assembled.set(DIRECTIVE_KEY_CLIENT_CONTEXT, dcsClientContext);
+                } catch (Exception e) {
+                    log.error("Assembling client context failed", e);
+                }
+
+            }
+            assembled.set(checkType(name), data);
+            return assembled;
+        }
+        return NullNode.getInstance();
+    }
+
+    private static String checkType(String name) {
+        switch (name) {
+            case "LinkClicked":
+            case "ButtonClicked":
+            case "RadioButtonClicked":
+                return DIRECTIVE_KEY_EVENT;
+            default:
+                return DIRECTIVE_KEY_DIRECTIVE;
         }
     }
 }

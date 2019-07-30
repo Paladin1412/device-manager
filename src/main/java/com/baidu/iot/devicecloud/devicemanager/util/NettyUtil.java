@@ -35,20 +35,20 @@ public class NettyUtil {
             channel
                     .writeAndFlush(msg)
                     .addListeners((ChannelFutureListener) future -> {
-                        if (!future.isSuccess()) {
+                        if (future.isSuccess()) {
+                            String msgLog;
+                            if (msg instanceof TlvMessage) {
+                                msgLog = prettyLogString.apply((TlvMessage) msg);
+                            } else {
+                                msgLog = String.valueOf(msg);
+                            }
+                            log.debug("Writing and flushing message \n{}\nto {} successfully.", msgLog, channel);
+                        } else {
                             log.error("Writing and flushing message {} to channel {} has failed",
                                     msg,
                                     channel,
                                     future.cause());
                         }
-
-                        String msgLog;
-                        if (msg instanceof TlvMessage) {
-                            msgLog = prettyLogString.apply((TlvMessage) msg);
-                        } else {
-                            msgLog = String.valueOf(msg);
-                        }
-                        log.debug("Writing and flushing message \n{}\nto {} successfully.", msgLog, channel);
                     }, ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
         } else {
             log.warn("Connection {} has been reset by peer", channel);

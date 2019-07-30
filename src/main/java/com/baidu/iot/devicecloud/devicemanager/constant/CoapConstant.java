@@ -5,6 +5,7 @@ package com.baidu.iot.devicecloud.devicemanager.constant;
  *
  * @author <a href="mailto:yaogang AT baidu DOT com">Yao Gang</a>
  */
+@SuppressWarnings("unused")
 public class CoapConstant {
     public static final int COAP_MAGIC_HEAD = 0xbeefdead;
     public static final int COAP_METHOD_EMPTY = 0;

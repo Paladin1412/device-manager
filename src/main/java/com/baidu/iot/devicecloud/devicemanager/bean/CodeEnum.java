@@ -1,4 +1,4 @@
-package com.baidu.iot.devicecloud.devicemanager.bean.device;
+package com.baidu.iot.devicecloud.devicemanager.bean;
 
 /**
  * The enum have code.

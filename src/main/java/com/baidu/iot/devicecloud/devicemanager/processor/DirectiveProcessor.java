@@ -9,6 +9,9 @@ import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.LogUtils;
+import com.baidu.iot.log.Log;
+import com.baidu.iot.log.LogProvider;
+import com.baidu.iot.log.Stopwatch;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -22,6 +25,8 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 import org.apache.commons.fileupload.MultipartStream;
 import org.apache.commons.io.FilenameUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.codec.multipart.Part;
 import org.springframework.lang.Nullable;
@@ -76,6 +81,9 @@ import static com.baidu.iot.devicecloud.devicemanager.util.TlvUtil.isPreTTSTlv;
  */
 @Slf4j
 public class DirectiveProcessor {
+    private static final Logger infoLog = LoggerFactory.getLogger("infoLog");
+    private static final LogProvider logProvider = LogProvider.getInstance();
+
     private static final int ONE_MINUTE_SECONDS = 60;
     private static final String SPEAK_URL_MAPPING_KEY_PATTERN = "%s_%s_%s";
     private static final String REQUEST_ID = "dialogueFinishedRequestId";
@@ -107,6 +115,8 @@ public class DirectiveProcessor {
 
     public Flux<TlvMessage> processAsr(String cuid, String sn, Flux<TlvMessage> messages) {
         if (messages != null) {
+            Log spanLog = logProvider.get(sn);
+            Stopwatch multipartStopwatch = spanLog.time("multipart");
             return messages.groupBy(TlvMessage::getType)
                     .flatMap(group -> {
                         Integer groupKey = group.key();
@@ -128,8 +138,9 @@ public class DirectiveProcessor {
                                                 TtsRequest request = assembleTtsRequest(cuid, sn, bytes, MessageType.BASE);
                                                 if (isPreTTSTlv.test(tlv)) {
                                                     // all directive packages(0xF006)
+                                                    spanLog.getStopwatch().pause();
                                                     ttsService.requestTTSAsync(request, true, null);
-
+                                                    spanLog.getStopwatch().start();
                                                 } else {
                                                     // all directive packages(0xF004)
                                                     // final tts 可能有多条，且多于两条时是multipart形式的metadata和audio
@@ -161,13 +172,16 @@ public class DirectiveProcessor {
                                     return processMultiparts(cuid, sn, parseParts(decoderDumi, group), MessageType.BASE, true)
                                             .flatMap(directive -> {
                                                 log.debug("Publishing asr directive:\n{}", directive);
+                                                spanLog.count("directive");
+                                                infoLog.info(spanLog.format(String.format("[ASR] Publishing asr directive:%s", directive)));
                                                 return Mono.justOrEmpty(Adapter.directive2DataPointTLV(directive, groupKey));
                                             });
                                 }
                             }
                         }
                         return Flux.empty();
-                    });
+                    })
+                    .doFinally(signalType -> multipartStopwatch.pause());
         }
         return Flux.empty();
     }
@@ -234,6 +248,7 @@ public class DirectiveProcessor {
         Map<String, String> keysMap = new HashMap<>();
         String cuid = request.getCuid();
         String sn = request.getSn();
+        Log spanLog = logProvider.get(sn);
         log.debug("Processing final TTS for cuid:{} sn:{}", cuid, sn);
         JsonNode jsonTree = JsonUtil.readTree(request.getData().binaryValue());
         JsonNode ttsJsonNode = jsonTree.path(JSON_KEY_TTS);
@@ -247,7 +262,10 @@ public class DirectiveProcessor {
                         keysMap.put(contentId, contentKey);
                     }
                 });
+                spanLog.getStopwatch().pause();
                 Map<String, String> cid_url_mappings = ttsService.requestTTSSync(request, false, keysMap);
+                spanLog.getStopwatch().start();
+                infoLog.info(spanLog.format(String.format("[ASR] Finish to request the final tts:%s", cid_url_mappings)));
                 if (cid_url_mappings != null) {
                     cid_url_mappings.entrySet()
                             .parallelStream()
@@ -275,10 +293,11 @@ public class DirectiveProcessor {
     }
 
     private Flux<Part> parseParts(MultipartStreamDecoder decoder, Flux<TlvMessage> messages) {
-        return Flux.merge(Flux.push(partFluxSink -> messages
+        return messages.flatMap(decoder::decode);
+        /*return Flux.merge(Flux.push(partFluxSink -> messages
                 .doOnNext(tlv -> partFluxSink.next(decoder.decode(tlv)))
                 .doFinally(signalType -> partFluxSink.complete())
-                .subscribe()));
+                .subscribe()));*/
     }
 
     /**

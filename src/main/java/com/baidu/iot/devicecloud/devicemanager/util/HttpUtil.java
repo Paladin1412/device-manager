@@ -4,6 +4,7 @@ import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.BaseResponse;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.LocalServerInfo;
+import com.baidu.iot.devicecloud.devicemanager.bean.device.DeviceResource;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
 import com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant;
@@ -15,9 +16,11 @@ import okhttp3.ResponseBody;
 import org.springframework.http.MediaType;
 import org.springframework.lang.Nullable;
 import org.springframework.util.StringUtils;
+import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.server.ServerRequest;
+import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.publisher.Mono;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiConsumer;
@@ -27,7 +30,6 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-import static com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant.COAP_RESPONSE_CODE_DUER_MSG_RSP_VALID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_FAILURE_CODE;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.MESSAGE_SUCCESS;
@@ -45,6 +47,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_P
  */
 @Slf4j
 public class HttpUtil {
+    private static final DproxyClientProvider clientProvider = DproxyClientProvider.getInstance();
     public static void close(Response response) {
         try {
             if (response != null) {
@@ -64,7 +67,7 @@ public class HttpUtil {
                             && resp.get(PAM_PARAM_STATUS).asInt(MESSAGE_FAILURE_CODE) == MESSAGE_SUCCESS_CODE;
                 }
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("Checking if the dcs response ok failed", e);
         }
 
@@ -105,7 +108,14 @@ public class HttpUtil {
     public static BiFunction<String, String, BaseResponse> successResponse =
             (String logId, String message) -> baseResponse(MESSAGE_SUCCESS_CODE, message, logId);
 
-    public static Function<String, BaseResponse> successResponses =
+    public static BiFunction<String, DataPointMessage, BaseResponse> successResponseFromDP =
+            (String logId, DataPointMessage message) -> {
+                BaseResponse baseResponse = baseResponse(MESSAGE_SUCCESS_CODE, null, logId);
+                baseResponse.setData(message.getPayload());
+                return baseResponse;
+            };
+
+    private static Function<String, BaseResponse> successResponses =
             logId -> baseResponse(MESSAGE_SUCCESS_CODE, MESSAGE_SUCCESS, logId);
 
     public static BiFunction<String, String, BaseResponse> failedResponses =
@@ -113,15 +123,6 @@ public class HttpUtil {
 
     public static Function<BaseMessage, BaseResponse> successResponsesWithMessage =
             (BaseMessage message) -> successResponses.apply(message != null ? message.getLogId() : null);
-
-    public static Function<Integer, DataPointMessage> defaultDataPointResponses =
-            code -> {
-                DataPointMessage response = new DataPointMessage();
-                response.setVersion(DEFAULT_VERSION);
-                response.setCode(code);
-                response.setId(IdGenerator.nextId());
-                return response;
-            };
 
     private static BiFunction<Integer, String, DataPointMessage> parseErrorDataPointMessage =
             (code, content) -> {
@@ -135,6 +136,17 @@ public class HttpUtil {
                 }
                 return response;
             };
+
+    public static DataPointMessage transformedDataPointResponses(DataPointMessage message, Integer code) {
+        message.setPayload(null);
+        message.setPath(null);
+        message.setMisc(null);
+        message.setCode(code);
+        return message;
+    }
+
+    public static Supplier<Function<String, Mono<ServerResponse>>> deviceMayNotOnline =
+            () -> uuid -> ServerResponse.badRequest().body(BodyInserters.fromObject(failedResponses.apply(null, String.format("This device may not online: %s", uuid))));
 
     public static Supplier<BiFunction<Integer, String, DataPointMessage>> failedDataPointResponses =
             () -> parseErrorDataPointMessage;
@@ -197,33 +209,85 @@ public class HttpUtil {
         return values.size() > 0 ? values.get(0) : null;
     }
 
+    public static String getSessionKey(String cuid, String cltId) {
+        return String.format("%s:%s", CommonConstant.SESSION_KEY_PREFIX + cuid, cltId);
+    }
+
+    public static void deviceOnlineStatus(final String cuid, final boolean online) {
+        clientProvider.hset(CommonConstant.SESSION_KEY_PREFIX + cuid, -1, CommonConstant.SESSION_DEVICE_ONLINE_STATUS, online);
+    }
+
+    public static boolean writeTokenToRedis(final String cuid, final String accessToken, final long expire) {
+        return clientProvider.hset(CommonConstant.SESSION_KEY_PREFIX + cuid, expire, CommonConstant.SESSION_DEVICE_ACCESS_TOKEN, accessToken);
+    }
+
     @Nullable
     public static String getTokenFromRedis(final String cuid) {
-        return DproxyClientProvider
-                .getInstance()
-                .get(CommonConstant.SESSION_KEY_PREFIX + cuid);
+        return Optional.ofNullable(clientProvider
+                .hget(CommonConstant.SESSION_KEY_PREFIX + cuid, CommonConstant.SESSION_DEVICE_ACCESS_TOKEN, String.class))
+                .orElseGet(() -> clientProvider
+                        .get(CommonConstant.SESSION_KEY_PREFIX + cuid));
     }
 
     public static void deleteTokenFromRedis(final String cuid) {
-        DproxyClientProvider
-                .getInstance()
-                .del(CommonConstant.SESSION_KEY_PREFIX + cuid);
+        clientProvider.hdel(CommonConstant.SESSION_KEY_PREFIX + cuid, CommonConstant.SESSION_DEVICE_ACCESS_TOKEN);
     }
 
-    public static boolean projectExist(final String cuid) {
-        int projectId = IdGenerator.projectId(cuid);
-        return DproxyClientProvider
-                .getInstance()
-                .exists(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectId);
+    public static void freshSession(String cuid, long expire) {
+        if (StringUtils.hasText(cuid) && expire > 0) {
+            clientProvider.expire(CommonConstant.SESSION_KEY_PREFIX + cuid, expire);
+        }
+    }
+
+    public static void deleteSessionFromRedis(final String cuid) {
+        clientProvider.del(CommonConstant.SESSION_KEY_PREFIX + cuid);
+    }
+
+    public static boolean projectExist(final long id) {
+        return clientProvider.exists(CommonConstant.PROJECT_RESOURCE_KEY_PREFIX + id, CommonConstant.PROJECT_INFO);
+    }
+
+    public static boolean deviceExist(final String cuid) {
+        return clientProvider.exists(CommonConstant.SESSION_KEY_PREFIX + cuid, CommonConstant.SESSION_DEVICE_INFO) ||
+                clientProvider.exists(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid);
+    }
+
+    public static void writeDeviceResourceToRedis(DeviceResource deviceResource, long expire) {
+        String cuid = Optional.ofNullable(deviceResource.getCuid()).orElse(deviceResource.getDeviceUuid());
+        if (StringUtils.hasText(cuid)) {
+            log.debug("Writing device resource to session. cuid:{}", cuid);
+            clientProvider.hset(CommonConstant.SESSION_KEY_PREFIX + cuid,
+                            expire,
+                            CommonConstant.SESSION_DEVICE_INFO,
+                            deviceResource);
+        }
+    }
+
+    public static void writeProjectResourceToRedis(ProjectInfo projectInfo, long projectResourceExpire) {
+        clientProvider.hset(CommonConstant.PROJECT_RESOURCE_KEY_PREFIX + projectInfo.getId(),
+                projectResourceExpire,
+                CommonConstant.PROJECT_INFO,
+                projectInfo);
+    }
+
+    public static ProjectInfo getProjectResourceFromRedis(final String cuid) {
+        if (StringUtils.hasText(cuid) && cuid.length() >= 4) {
+            long projectId = IdGenerator.projectId(cuid);
+            return clientProvider.hget(CommonConstant.PROJECT_RESOURCE_KEY_PREFIX + projectId, CommonConstant.PROJECT_INFO, ProjectInfo.class);
+        }
+        return null;
     }
 
     @Nullable
-    public static ProjectInfo getProjectInfoFromRedis(final String cuid) {
-        int projectId = IdGenerator.projectId(cuid);
-        return DproxyClientProvider
-                .getInstance()
-                .hget(CommonConstant.PROJECT_INFO_KEY_PREFIX + projectId,
-                        CommonConstant.PROJECT_INFO, ProjectInfo.class);
+    public static DeviceResource getDeviceInfoFromRedis(final String cuid) {
+        return Optional.ofNullable(clientProvider
+                .hget(CommonConstant.SESSION_KEY_PREFIX + cuid, CommonConstant.SESSION_DEVICE_INFO, DeviceResource.class))
+                .orElseGet(() -> clientProvider
+                        .hget(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid, CommonConstant.SESSION_DEVICE_INFO, DeviceResource.class));
+    }
+
+    public static void deleteDeviceResourceFromRedis(final String cuid) {
+        clientProvider.del(CommonConstant.DEVICE_RESOURCE_KEY_PREFIX + cuid);
     }
 
     /**

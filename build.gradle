@@ -23,6 +23,7 @@ dependencies {
     compile 'org.springframework.boot:spring-boot-starter-validation'
     compile 'org.springframework.boot:spring-boot-starter-webflux'
     compile 'org.springframework.retry:spring-retry'
+	compile 'com.baidu.bigpipe:bigpipe4j:1.3.5.3'
 	// https://mvnrepository.com/artifact/com.google.guava/guava
 	compile group: 'com.google.guava', name: 'guava', version: '27.0.1-jre'
 	// https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp
@@ -32,7 +33,7 @@ dependencies {
 	compile group: 'commons-fileupload', name: 'commons-fileupload', version: '1.4'
 	// https://mvnrepository.com/artifact/commons-codec/commons-codec
 	compile group: 'commons-codec', name: 'commons-codec', version: '1.12'
-//	compile rootProject.fileTree(dir: rootProject.libDir, include: '*.jar')
+	compile rootProject.fileTree(dir: rootProject.libDir, include: '*.jar')
 
 	compileOnly 'org.projectlombok:lombok'
 //	runtimeOnly 'org.springframework.boot:spring-boot-devtools'

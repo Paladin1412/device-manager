@@ -1,5 +1,7 @@
 package com.baidu.iot.devicecloud.devicemanager.config;
 
+import com.baidu.iot.devicecloud.devicemanager.handler.http.AliveHandler;
+import com.baidu.iot.devicecloud.devicemanager.handler.http.DlpHandler;
 import com.baidu.iot.devicecloud.devicemanager.handler.http.PushHandler;
 import com.baidu.iot.devicecloud.devicemanager.handler.http.ReportHandler;
 import org.springframework.context.annotation.Bean;
@@ -8,6 +10,7 @@ import org.springframework.web.reactive.function.server.RequestPredicate;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
+import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
 import static org.springframework.web.reactive.function.server.RequestPredicates.POST;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
@@ -26,6 +29,18 @@ public class Endpoints {
     @Bean
     RouterFunction<ServerResponse> pushEndpoints(PushHandler handler) {
         return route(i(POST("/api/v2/push")), handler::deal);
+    }
+
+    @Bean
+    RouterFunction<ServerResponse> dlpEndpoints(DlpHandler handler) {
+        return route(i(POST("/v1/interactive/message")), handler::deal)
+                .andRoute(i(POST("/v1/interactive/online")), handler::dlpStatus)
+                .andRoute(i(POST("/api/v1/dlp/ota/{uuid}")), handler::otaUpgrade);
+    }
+
+    @Bean
+    RouterFunction<ServerResponse> aliveEndpoints(AliveHandler handler) {
+        return route(GET("/alive"), handler::deal);
     }
 
     private static RequestPredicate i(RequestPredicate target) {

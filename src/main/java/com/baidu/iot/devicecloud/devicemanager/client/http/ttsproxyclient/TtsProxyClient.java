@@ -1,5 +1,6 @@
 package com.baidu.iot.devicecloud.devicemanager.client.http.ttsproxyclient;
 
+import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.cache.BnsCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.AbstractHttpClient;
 import com.baidu.iot.devicecloud.devicemanager.client.http.callback.CallbackFuture;
@@ -11,6 +12,8 @@ import com.baidu.iot.devicecloud.devicemanager.util.PathUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
@@ -32,6 +35,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CLT_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_CUID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.HEADER_SN;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_URL;
@@ -49,6 +53,7 @@ public class TtsProxyClient extends AbstractHttpClient {
     private static final String TTS_PROXY_ROOT = "api/v1";
     private static final String[] TTS_PROXY_PATH = {"tts"};
     private static final String[] TTS_PROXY_CACHE_PATH = {"cache"};
+    private static final String[] TTS_PROXY_TEXT_TO_VOICE_PATH = {"text2voice"};
 
     @Value("${tts.proxy.scheme:http://}")
     private String ttsProxyScheme;
@@ -77,6 +82,12 @@ public class TtsProxyClient extends AbstractHttpClient {
         return sendSync(request);
     }
 
+    public Response requestText2VoiceAsync(String content, DataPointMessage message) throws IOException {
+        Request request = buildText2VoiceRequest(content, message);
+        Assert.notNull(request, "Text to Voice Request is null");
+        return sendSync(request);
+    }
+
     private Request buildJsonTtsRequest(TtsRequest message, boolean isPre, Map<String, String> keysMap) {
         BinaryNode valueBin = message.getData();
         JsonNode valueNode = JsonUtil.readTree(valueBin.binaryValue());
@@ -91,7 +102,7 @@ public class TtsProxyClient extends AbstractHttpClient {
             return null;
         }
         Request.Builder builder = new Request.Builder()
-                .url(getFullPath(message.getCuid(), message.getSn(), TTS_PROXY_PATH))
+                .url(getFullPath(message.getCuid(), null, TTS_PROXY_PATH))
                 .header(HttpHeaders.CONTENT_TYPE, org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
                 .header(CommonConstant.HEADER_MESSAGE_TIMESTAMP, Long.toString(System.currentTimeMillis()))
                 .header(CommonConstant.HEADER_PRE_TTS, Boolean.toString(isPre))
@@ -128,7 +139,7 @@ public class TtsProxyClient extends AbstractHttpClient {
         );
 
         String[] pathItems = Stream.concat(Stream.of(TTS_PROXY_CACHE_PATH), Stream.of(contentId)).toArray(String[]::new);
-        String url = getFullPath(message.getCuid(), message.getSn(), pathItems);
+        String url = getFullPath(message.getCuid(), null, pathItems);
         UriComponentsBuilder uriComponentsBuilder = UriComponentsBuilder.fromHttpUrl(url);
 
         // agreements with the tts-proxy service
@@ -158,7 +169,7 @@ public class TtsProxyClient extends AbstractHttpClient {
 
     private Request buildRequest(String cuid, String sn, String cid, int messageType) {
         String[] pathItems = Stream.concat(Stream.of(TTS_PROXY_PATH), Stream.of(cid)).toArray(String[]::new);
-        UriComponentsBuilder uriComponentsBuilder = UriComponentsBuilder.fromHttpUrl(getFullPath(cuid, sn, pathItems));
+        UriComponentsBuilder uriComponentsBuilder = UriComponentsBuilder.fromHttpUrl(getFullPath(cuid, null, pathItems));
 
         // agreements with the tts-proxy service
         if (MessageType.PUSH_MESSAGE == messageType) {
@@ -178,8 +189,42 @@ public class TtsProxyClient extends AbstractHttpClient {
         return builder.build();
     }
 
-    private String getFullPath(String cuid, String sn, String[] path) {
-        String domainAddress = getDomainAddress(cuid, sn);
+    private Request buildText2VoiceRequest(String content, DataPointMessage message) {
+        String cuid = message.getDeviceId();
+        String cltId = message.getCltId();
+        String sn = message.getSn();
+        String[] pathItems = Stream.concat(Stream.of(TTS_PROXY_TEXT_TO_VOICE_PATH), Stream.of(cuid)).toArray(String[]::new);
+        UriComponentsBuilder uriComponentsBuilder = UriComponentsBuilder.fromHttpUrl(getFullPath(cuid, null, pathItems));
+
+        ObjectNode payload = JsonUtil.createObjectNode();
+        payload.set("txt", TextNode.valueOf(content));
+        RequestBody requestBody = RequestBody.create(
+                MediaType.get(org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON_UTF8_VALUE),
+                payload.toString()
+        );
+
+        Request.Builder builder = new Request.Builder()
+                .url(uriComponentsBuilder.build().toString())
+                .header(CommonConstant.HEADER_MESSAGE_TIMESTAMP, Long.toString(System.currentTimeMillis()))
+                .post(requestBody);
+
+        if (StringUtils.hasText(cuid)) {
+            builder.header(HEADER_CUID, cuid);
+        }
+
+        if (StringUtils.hasText(cltId)) {
+            builder.header(HEADER_CLT_ID, cltId);
+        }
+
+        if (StringUtils.hasText(sn)) {
+            builder.header(HEADER_SN, sn);
+        }
+
+        return builder.build();
+    }
+
+    private String getFullPath(String cuid, String cltId, String[] path) {
+        String domainAddress = getDomainAddress(cuid, cltId);
         return StringUtils.applyRelativePath(
                 PathUtil.lookAfterSuffix(domainAddress),
                 getFullRelativePath(path)
@@ -191,11 +236,11 @@ public class TtsProxyClient extends AbstractHttpClient {
      * @return {@code ip:port}
      */
     @NotNull
-    private String getDomainAddress(String cuid, String sn) {
+    private String getDomainAddress(String cuid, String cltId) {
         String domainAddress = null;
         InetSocketAddress hashedAddress =
-                StringUtils.isEmpty(cuid) || StringUtils.isEmpty(sn) ?
-                        BnsCache.getRandomTtsProxyAddress() : BnsCache.getHashedTtsProxyAddress(cuid, sn);
+                StringUtils.isEmpty(cuid) && StringUtils.isEmpty(cltId) ?
+                        BnsCache.getRandomTtsProxyAddress() : BnsCache.getHashedTtsProxyAddress(cuid, cltId);
         if (hashedAddress != null) {
             domainAddress = PathUtil.dropOffPrefix(hashedAddress.toString(), SPLITTER_URL);
         }

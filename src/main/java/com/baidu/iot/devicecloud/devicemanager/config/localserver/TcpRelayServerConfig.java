@@ -22,4 +22,7 @@ public class TcpRelayServerConfig {
 
     @Value("${dm.tcp.timeout.idle.read:10}")
     public int dmTcpTimeoutIdle;
+
+    @Value("${dm.timezone:Asia/Shanghai}")
+    public String dmTimezone;
 }

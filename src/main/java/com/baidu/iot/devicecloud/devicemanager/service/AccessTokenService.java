@@ -1,30 +1,24 @@
 package com.baidu.iot.devicecloud.devicemanager.service;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.AuthorizationMessage;
-import com.baidu.iot.devicecloud.devicemanager.bean.BaseMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
 import com.baidu.iot.devicecloud.devicemanager.client.http.deviceiamclient.DeviceIamClient;
-import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
-import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
 import com.baidu.iot.devicecloud.devicemanager.util.HttpUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.LogUtils;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.Response;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.close;
 import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.deleteTokenFromRedis;
-import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getProjectInfoFromRedis;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.getProjectResourceFromRedis;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.writeTokenToRedis;
 
 /**
  * <p>Common access token service.</p>
@@ -80,20 +74,9 @@ public class AccessTokenService {
      * @param cuid the unique device id
      * @param accessToken being obtained after authorized legally
      */
-    void cacheAccessToken(String cuid, String accessToken) {
-        if (StringUtils.hasText(cuid) && StringUtils.hasText(accessToken)) {
-            CompletableFuture<Response> future = writeTokenToRedis(cuid, accessToken);
-            if (future != null) {
-                future.handleAsync(
-                        (r, t) -> {
-                            if (r.isSuccessful()) {
-                                atCache.put(cuid, accessToken);
-                            }
-                            close(r);
-                            return null;
-                        }
-                );
-            }
+    void cacheAccessToken(String cuid, String accessToken, long expire) {
+        if (StringUtils.hasText(cuid) && StringUtils.hasText(accessToken) && writeTokenToRedis(cuid, accessToken, expire)) {
+            atCache.put(cuid, accessToken);
         }
     }
 
@@ -107,18 +90,9 @@ public class AccessTokenService {
     public String getAccessToken(String cuid, String logId) {
         try {
             return atCache.get(cuid, () -> try2ObtainAccessToken(cuid, logId));
-        } catch (ExecutionException e) {
+        } catch (Exception e) {
             log.error("Obtaining access token failed", e);
             return null;
-        }
-    }
-
-    void releaseAccessToken(BaseMessage message) {
-        String cuid = message.getDeviceId();
-        String logId = message.getLogId();
-        log.debug("Invalidating access token. cuid:{} logId:{}", cuid, logId);
-        if (StringUtils.hasText(cuid)) {
-            releaseAccessToken(cuid, logId);
         }
     }
 
@@ -127,7 +101,7 @@ public class AccessTokenService {
      * @param cuid the unique device id
      * @param logId log id
      */
-    private void releaseAccessToken(String cuid, String logId) {
+    void releaseAccessToken(String cuid, String logId) {
         log.debug("Invalidating access token. cuid:{} logId:{}", cuid, logId);
         atCache.invalidate(cuid);
         deleteTokenFromRedis(cuid);
@@ -138,7 +112,7 @@ public class AccessTokenService {
         String accessToken = HttpUtil.getTokenFromRedis(cuid);
         if (StringUtils.isEmpty(accessToken)) {
             // try to get project info from redis, which should'v been written into at authorization time.
-            ProjectInfo projectInfo = getProjectInfoFromRedis(cuid);
+            ProjectInfo projectInfo = getProjectResourceFromRedis(cuid);
             if (projectInfo != null
                     && StringUtils.hasText(projectInfo.getVoiceId())
                     && StringUtils.hasText(projectInfo.getVoiceKey())) {
@@ -147,26 +121,12 @@ public class AccessTokenService {
                 // try to get access token by using project info
                 String at = deviceIamClient.getAccessToken(cuid, vId, vKey, logId);
                 if (StringUtils.hasText(at)) {
-                    CompletableFuture<Response> future = writeTokenToRedis(cuid, at);
-                    if (future != null) {
-                        future.handleAsync(
-                                (r, t) -> {
-                                    close(r);
-                                    return null;
-                                }
-                        );
-                    }
+                    writeTokenToRedis(cuid, at, -1);
+                    return at;
                 }
-                return at;
             }
         }
 
         return accessToken;
-    }
-
-    private CompletableFuture<Response> writeTokenToRedis(final String cuid, final String accessToken) {
-        return DproxyClientProvider
-                .getInstance()
-                .setexAsync(CommonConstant.SESSION_KEY_PREFIX + cuid, accessTokenExpire, accessToken);
     }
 }

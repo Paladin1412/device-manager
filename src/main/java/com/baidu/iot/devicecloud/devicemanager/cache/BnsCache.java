@@ -122,8 +122,8 @@ public class BnsCache {
         return getRandomInetAddress(TTS_PROXY_BNS);
     }
 
-    public static InetSocketAddress getHashedTtsProxyAddress(String cuid, String sn) {
-        return getHashedAddress(TTS_PROXY_BNS, String.format("%s_%s", cuid, sn));
+    public static InetSocketAddress getHashedTtsProxyAddress(String cuid, String cltId) {
+        return getHashedAddress(TTS_PROXY_BNS, String.format("%s_%s", cuid, StringUtils.hasText(cltId) ? cltId : ""));
     }
 
     public static InetSocketAddress getRandomDProxyAddress() {
@@ -138,11 +138,16 @@ public class BnsCache {
         try {
             List<String> ipPorts = getIpPorts(bns);
 
-            String ipPort = ipPorts.get(new Random().nextInt(ipPorts.size()));
-            String[] items = ipPort.split(Pattern.quote(SPLITTER_COLON));
-            if (items.length >= 2) {
-                log.debug(Arrays.toString(items));
-                return new InetSocketAddress(InetAddress.getByName(items[0]), Integer.valueOf(items[1]));
+            if (ipPorts != null) {
+                if (ipPorts.size() == 0) {
+                    return null;
+                }
+                String ipPort = ipPorts.get(new Random().nextInt(ipPorts.size()));
+                String[] items = ipPort.split(Pattern.quote(SPLITTER_COLON));
+                if (items.length >= 2) {
+                    log.debug(Arrays.toString(items));
+                    return new InetSocketAddress(InetAddress.getByName(items[0]), Integer.valueOf(items[1]));
+                }
             }
         } catch (Exception e) {
             log.error("Getting random address failed", e);
@@ -182,7 +187,7 @@ public class BnsCache {
     }
 
     private static String getKey(BaseMessage message) {
-        return String.format("%s_%s_%s", message.getDeviceId(), message.getCltId(), message.getSn());
+        return String.format("%s_%s", message.getDeviceId(), message.getCltId());
     }
 
     private static final class BnsCacheLoader extends CacheLoader<String, List<String>> {
@@ -206,11 +211,11 @@ public class BnsCache {
                 return emptySupplier.get();
             }
             String cmd = String.format(GET_IP_BY_BNS, bns);
-            log.debug("cmd={}", cmd);
+//            log.debug("cmd={}", cmd);
             try {
                 process = run.exec(cmd);
                 InputStream in = process.getInputStream();
-                List<String> result = handleCmdData(in, bns);
+                List<String> result = handleCmdData(in);
                 in.close();
                 return result;
             } catch (Exception e) {
@@ -224,7 +229,7 @@ public class BnsCache {
             return emptySupplier.get();
         }
 
-        private List<String> handleCmdData(InputStream in, String key) {
+        private List<String> handleCmdData(InputStream in) {
             List<String> temp = new ArrayList<>();
             try {
                 BufferedReader br = new BufferedReader(new InputStreamReader(in));
@@ -235,11 +240,6 @@ public class BnsCache {
                         temp.add(String.format(HOST_ADDRESS, r[1], r[2]));
                     }
                     line = br.readLine();
-                }
-                if (temp.size() > 0) {
-                    for (int i = 0; i < temp.size(); i++) {
-                        log.debug("get bns={}, [{}]host={}", key, i, temp.get(i));
-                    }
                 }
                 return temp;
             } catch (IOException e) {

@@ -22,6 +22,7 @@ public class CommonConstant {
     public static final String HEADER_ALIVE_INTERVAL = "X-ALIVE-INTERVAL";
     public static final String HEADER_STATUS_CODE = "X-STATUS-CODE";
     public static final String HEADER_PRE_TTS = "X-PRE-TTS";
+    public static final String HEADER_AUTH_TOKEN = "X-Auth-Token";
 
     public static final String MESSAGE_ACK_NEED = "needAck";
     public static final String MESSAGE_ACK_SECRET_KEY = "secretKey";
@@ -41,10 +42,12 @@ public class CommonConstant {
     public static final String PARAMETER_AUDIO = "audio";
     public static final String PARAMETER_NAME = "name";
     public static final String PARAMETER_CID = "cid:";
-    public static final String PARAMETER_CONTENT_DISPOSITION = "content-disposition";
     public static final String PARAMETER_CONTENT_ID = "Content-ID";
     public static final String PARAMETER_CLIENT_ID = "clt_id";
     public static final String PARAMETER_MESSAGE_ID = "msgid";
+
+    public static final String GREY_CONF = "grey_conf";
+    public static final String GREY_CONF_USE_OFFLINE_PIPELET = "use_offline_pipelet";
 
     // splitters
     public static final String SPLITTER_DOLLAR = "$";
@@ -53,13 +56,19 @@ public class CommonConstant {
     public static final String SPLITTER_SPACE = " ";
     public static final String SPLITTER_EQUALITY_SIGN = "=";
     public static final String SPLITTER_SEMICOLON = ";";
+    public static final String SPLITTER_UNDERSCORE = "_";
+    public static final String SPLITTER_LF = "\n";
 
     public static final String DATETIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+    public static final String LOG_DATETIME_FORMAT = "yyyy-MM-dd_HH:mm:ss.SSS";
 
-    public static final String SESSION_KEY_PREFIX = "device:session:";
+    public static final String SESSION_KEY_PREFIX = "duer:iot:device:session:";
+    public static final String SESSION_DEVICE_ONLINE_STATUS = "onlineStatus";
     public static final String SESSION_DEVICE_ACCESS_TOKEN = "accessToken";
+    public static final String SESSION_DEVICE_INFO = "deviceInfo";
 
-    public static final String PROJECT_INFO_KEY_PREFIX = "duer:iot:sh:info:project:";
+    public static final String DEVICE_RESOURCE_KEY_PREFIX = "duer:iot:sh:info:device:";
+    public static final String PROJECT_RESOURCE_KEY_PREFIX = "duer:iot:sh:info:project:";
     public static final String PROJECT_INFO = "projectInfo";
 
     public static final String MESSAGE_SUCCESS = "success";

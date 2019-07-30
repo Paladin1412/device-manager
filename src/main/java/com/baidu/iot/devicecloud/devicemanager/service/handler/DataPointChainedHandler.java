@@ -21,14 +21,20 @@ public class DataPointChainedHandler implements ReactorDispatcherHandler<DataPoi
 
     @Autowired
     DataPointChainedHandler(DuerEventHandler duerEventHandler,
-                            DiscardHandler discardHandler,
-                            DataPointAdviceHandler adviceHandler) {
+                            DuerBindUtokenHandler duerBindUtokenHandler,
+                            Sending2BigpipeHandler sending2BigpipeHandler,
+                            DataPointAdviceHandler adviceHandler,
+                            DiscardHandler discardHandler) {
         // The first link in chain is supposed to handle the most requests
         this.requestHandler = duerEventHandler;
         // Link the chain up
-        this.requestHandler.linkWith(discardHandler);
+        this.requestHandler
+                .linkWith(duerBindUtokenHandler)
+                .linkWith(sending2BigpipeHandler)
+                .linkWith(adviceHandler)
+                .linkWith(discardHandler);
 
-        this.responseHandler = adviceHandler;
+        this.responseHandler = discardHandler;
     }
 
     @Override

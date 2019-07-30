@@ -26,6 +26,7 @@ public class BaseResponse {
     @JsonProperty("logid")
     private String logId;
 
+    @JsonProperty("payload")
     private String data;
 
     @JsonIgnore

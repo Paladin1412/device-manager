@@ -10,7 +10,7 @@
             <level>ERROR</level>
         </filter>
         <encoder>
-            <Pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%level] [%file:%line] %msg%n</Pattern>
+            <Pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%level] [%file:%line] %clr([%15.15t]){faint} %msg%n</Pattern>
             <charset>UTF-8</charset>
         </encoder>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
@@ -42,7 +42,7 @@
             <level>INFO</level>
         </filter>
         <encoder>
-            <Pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%level] [%file:%line] %msg%n</Pattern>
+            <Pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%level] [%file:%line] %clr([%15.15t]){faint} %msg%n</Pattern>
             <charset>UTF-8</charset>
         </encoder>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
