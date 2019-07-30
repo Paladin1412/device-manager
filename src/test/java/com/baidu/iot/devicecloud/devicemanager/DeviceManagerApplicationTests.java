@@ -4,8 +4,12 @@ import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.cache.AddressCache;
 import com.baidu.iot.devicecloud.devicemanager.client.http.ttsproxyclient.bean.TtsRequest;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
+import com.baidu.iot.devicecloud.devicemanager.service.AccessTokenService;
+import com.baidu.iot.devicecloud.devicemanager.service.AuthenticationService;
+import com.baidu.iot.devicecloud.devicemanager.service.DeviceSessionService;
 import com.baidu.iot.devicecloud.devicemanager.service.SecurityService;
 import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
+import com.baidu.iot.devicecloud.devicemanager.util.HttpUtil;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.junit.Assert;
@@ -28,6 +32,15 @@ import java.util.stream.Stream;
 public class DeviceManagerApplicationTests {
 	@Autowired
 	private TtsService ttsService;
+
+	@Autowired
+	private AccessTokenService accessTokenService;
+
+	@Autowired
+	private AuthenticationService authenticationService;
+
+	@Autowired
+	private DeviceSessionService deviceSessionService;
 
 	@Autowired
 	private SecurityService securityService;
@@ -85,6 +98,42 @@ public class DeviceManagerApplicationTests {
 		Assert.assertEquals(5, items.length);
         System.out.println(Arrays.toString(items));
     }
+
+	@Test
+	public void testAt() {
+		String at = accessTokenService.getAccessToken("02a300000000ac", "test123");
+		System.out.println(at);
+//		deleteTokenFromRedis("02a300000000ac");
+
+	}
+
+	/*@Test
+	public void testAuth() throws InterruptedException {
+		AuthorizationMessage message = new AuthorizationMessage();
+		message.setDeviceId("02a300000000ac");
+		message.setLogId("2818435340");
+		message.setCltId("1$02a300000000ac$10.211.245.46$8305$1024");
+		message.setCuid("02a300000000ac");
+		message.setUuid("02a300000000ac");
+		message.setToken("X8jT8Ax7AaZ5pUApZkR1GQgbVsZkLybX");
+		message.setMessageType(1);
+		message.setSn("1$02a300000000ac$10.211.245.46$8305$1024_2_3770981291318_10.211.245.46_8305_26090_1561701954.383938");
+		authenticationService.work(message).subscribe();
+		Thread.sleep(500000);
+	}*/
+
+	@Test
+	public void testHset() {
+		HttpUtil.writeTokenToRedis("0285000000001d", "test_access_token", 10);
+		String at = HttpUtil.getTokenFromRedis("0285000000001d");
+		System.out.println(at);
+	}
+
+	@Test
+	public void testClear() throws InterruptedException {
+		HttpUtil.deleteSessionFromRedis("0285000000001d");
+		Thread.sleep(1000);
+	}
 
 	private String otaEvents = "2019-06-11 17:50:12 {\"description\":null,\"event\":4,\"percent\":0.201099,\"transaction\":\"1472892\"}\n2019-06-11 17:50:11 {\"description\":null,\"event\":4,\"percent\":0.10189,\"transaction\":\"1472892\"}\n2019-06-11 17:50:08 {\"description\":\"Creater Updater success\",\"event\":0,\"transaction\":\"1472892\"}";
 

@@ -1,6 +1,7 @@
 package com.baidu.iot.devicecloud.devicemanager;
 
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
+import com.baidu.iot.devicecloud.devicemanager.util.LogUtils;
 import com.fasterxml.jackson.databind.node.BinaryNode;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -15,12 +16,10 @@ import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.UnicastProcessor;
-import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.concurrent.Queues;
 
 import java.time.Duration;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,7 +28,6 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -40,6 +38,7 @@ import java.util.stream.Collectors;
 public class TestPublisher {
     private Logger log = LoggerFactory.getLogger(TestPublisher.class);
     private Cache<String, String> cache;
+    private Cache<String, UnicastProcessor<String>> pooledMonoSignals;
 
     private Callable<String> callable = () -> {
         Thread.sleep(5000);
@@ -54,10 +53,17 @@ public class TestPublisher {
                 .initialCapacity(10000)
                 .maximumSize(10000000)
                 .build();
+
+        pooledMonoSignals = CacheBuilder.newBuilder()
+                .concurrencyLevel(100)
+                .expireAfterWrite(Duration.ofMinutes(1))
+                .maximumSize(1_000_000)
+                .removalListener(LogUtils.REMOVAL_LOGGER.apply(log))
+                .build();
     }
 
     @Test
-    public void testMono() throws Exception {
+    public void testMono() {
         Mono.justOrEmpty(Optional.ofNullable(get()))
                 .switchIfEmpty(Mono.just("default"))
         .subscribe(System.out::println);
@@ -424,5 +430,53 @@ public class TestPublisher {
                             return t1;
                         }
                 );
+    }
+
+    @Test
+    public void testCheck() throws InterruptedException {
+        String key = "123";
+        UnicastProcessor<String> signal = UnicastProcessor.create(Queues.<String>xs().get());
+        pooledMonoSignals.put(key, signal);
+
+        List<String> stub = new ArrayList<>();
+        stub.add("1");
+        stub.add("2");
+        stub.add("3");
+
+        signal.onNext("1");
+        Thread checker = new Thread(() -> check(signal, stub).doOnNext(b -> log.debug("check: {}", b)).subscribe());
+        checker.start();
+        signal.onNext("2");
+        Thread.sleep(10000);
+        signal.onNext("3");
+        checker.join();
+    }
+
+    private Mono<Boolean> check(UnicastProcessor<String> signals, List<String> stub) {
+        return Mono.create(sink -> signals
+                .subscribe(new BaseSubscriber<String>(){
+                    @Override
+                    protected void hookOnNext(String ack) {
+                        if (ack != null) {
+                            if (stub.contains(ack)) {
+                                stub.removeIf(i -> i.equalsIgnoreCase(ack));
+                            }
+                            if (stub.isEmpty()) {
+                                sink.success(true);
+                                signals.cancel();
+                            }
+                        }
+                    }
+
+                    @Override
+                    protected void hookOnComplete() {
+                        sink.success();
+                    }
+
+                    @Override
+                    protected void hookOnError(Throwable throwable) {
+                        sink.error(throwable);
+                    }
+                }));
     }
 }
