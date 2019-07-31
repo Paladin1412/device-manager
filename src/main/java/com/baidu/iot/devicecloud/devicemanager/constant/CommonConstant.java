@@ -48,6 +48,7 @@ public class CommonConstant {
 
     public static final String GREY_CONF = "grey_conf";
     public static final String GREY_CONF_USE_OFFLINE_PIPELET = "use_offline_pipelet";
+    public static final String GREY_CONF_USE_ASR_TTS = "use_asr_tts";
 
     // splitters
     public static final String SPLITTER_DOLLAR = "$";

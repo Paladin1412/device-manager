@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_CONF;
+import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_CONF_USE_ASR_TTS;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.GREY_CONF_USE_OFFLINE_PIPELET;
 import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SPLITTER_UNDERSCORE;
 
@@ -76,53 +77,68 @@ public class GreyConfiguration implements InitializingBean {
         }
     }
 
-    public static boolean checkGreyConf(String cuid) {
+    public static boolean useOfflinePipelet(String cuid) {
         try {
             JsonNode testDevices = get(GREY_CONF_USE_OFFLINE_PIPELET);
-
-            if (testDevices == null || testDevices.isNull() || testDevices.isMissingNode()) {
-                return false;
-            }
-
-            if (isAll(testDevices)) {
-                return true;
-            }
-
-            String project = cuid.substring(0, 4);
-            String hex = cuid.substring(4);
-            Long seq = Long.valueOf(hex, 16);
-
-            Set<String> devices = StringUtils.commaDelimitedListToSet(testDevices.asText());
-            for (String s : devices) {
-                String[] items = StringUtils.delimitedListToStringArray(s, SPLITTER_UNDERSCORE);
-                if (items.length != 3) {
-                    log.debug("Grey info conf error:{}", s);
-                    continue;
-                }
-                String greyPid = items[0];
-                String greyBegin = items[1];
-                String greyEnd   = items[2];
-                // Not the current project id
-                if (!greyPid.equalsIgnoreCase(project)) {
-                    continue;
-                }
-                // All case
-                if (greyBegin.equalsIgnoreCase("ALL")
-                        && greyEnd.equalsIgnoreCase("ALL")) {
-                    return  true;
-                }
-
-                // Turn uuid to long
-                Long begin = Long.valueOf(greyBegin, 16);
-                Long end   = Long.valueOf(greyEnd, 16);
-                if (seq >= begin && seq <= end) {
-                    return true;
-                }
-            }
+            return checkCondition(cuid, testDevices);
         } catch (Exception e) {
-            log.warn("Checking if {} is peppa device failed", cuid, e);
+            log.warn("Checking if {} should use offline pipelet failed", cuid, e);
         }
 
+        return false;
+    }
+
+    public static boolean useAsrTTS(String cuid) {
+        try {
+            JsonNode testDevices = get(GREY_CONF_USE_ASR_TTS);
+            return checkCondition(cuid, testDevices);
+        } catch (Exception e) {
+            log.warn("Checking if {} should use dumi tts failed", cuid, e);
+        }
+
+        return false;
+    }
+
+    private static boolean checkCondition(String cuid, JsonNode condition) {
+        if (condition == null || condition.isNull() || condition.isMissingNode()) {
+            return false;
+        }
+
+        if (isAll(condition)) {
+            return true;
+        }
+
+        String project = cuid.substring(0, 4);
+        String hex = cuid.substring(4);
+        Long seq = Long.valueOf(hex, 16);
+
+        Set<String> devices = StringUtils.commaDelimitedListToSet(condition.asText());
+        for (String s : devices) {
+            String[] items = StringUtils.delimitedListToStringArray(s, SPLITTER_UNDERSCORE);
+            if (items.length != 3) {
+                log.debug("Grey info conf error:{}", s);
+                continue;
+            }
+            String greyPid = items[0];
+            String greyBegin = items[1];
+            String greyEnd   = items[2];
+            // Not the current project id
+            if (!greyPid.equalsIgnoreCase(project)) {
+                continue;
+            }
+            // All case
+            if (greyBegin.equalsIgnoreCase("ALL")
+                    && greyEnd.equalsIgnoreCase("ALL")) {
+                return  true;
+            }
+
+            // Turn uuid to long
+            Long begin = Long.valueOf(greyBegin, 16);
+            Long end   = Long.valueOf(greyEnd, 16);
+            if (seq >= begin && seq <= end) {
+                return true;
+            }
+        }
         return false;
     }
 
