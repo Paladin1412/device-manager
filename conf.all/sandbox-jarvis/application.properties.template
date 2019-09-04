@@ -67,3 +67,5 @@ grey.bigpipe.msg.pipelet.map=DATA:6|HEARTBEAT:6|DEFAULT:6
 grey.bigpipe.client.number.per.pipe=5
 
 grey.conf.bns_group=group.duer-peggy-online-conf.IOT.all
+
+log.ces.url=http://gzhxy-vs-learn-cs06.gzhxy.baidu.com:8086/click

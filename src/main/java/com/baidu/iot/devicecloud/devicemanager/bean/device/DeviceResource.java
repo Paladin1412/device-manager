@@ -58,4 +58,6 @@ public class DeviceResource {
     private String accessToken;
 
     private String cltId;
+
+    private DeviceStatus deviceStatus;
 }
