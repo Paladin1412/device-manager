@@ -9,6 +9,7 @@ import com.baidu.iot.devicecloud.devicemanager.bean.device.ProjectInfo;
 import com.baidu.iot.devicecloud.devicemanager.client.http.dproxy.DproxyClientProvider;
 import com.baidu.iot.devicecloud.devicemanager.constant.CoapConstant;
 import com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant;
+import com.baidu.iot.devicecloud.devicemanager.constant.DataPointConstant;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Response;
@@ -143,6 +144,18 @@ public class HttpUtil {
         message.setMisc(null);
         message.setCode(code);
         return message;
+    }
+
+    public static DataPointMessage dataPointResponses(DataPointMessage origin, int code, String message) {
+        DataPointMessage response = new DataPointMessage();
+        response.setVersion(origin == null ? DEFAULT_VERSION : origin.getVersion());
+        response.setCode(code);
+        response.setId(origin == null ? IdGenerator.nextId() : origin.getId());
+        response.setPath(DataPointConstant.DATA_POINT_PRIVATE_ERROR);
+        if (StringUtils.hasText(message)) {
+            response.setPayload(message);
+        }
+        return response;
     }
 
     public static Supplier<Function<String, Mono<ServerResponse>>> deviceMayNotOnline =
