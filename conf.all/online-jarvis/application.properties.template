@@ -68,4 +68,7 @@ grey.bigpipe.client.number.per.pipe=5
 
 grey.conf.bns_group=group.duer-peggy-online-conf.IOT.all
 
-log.ces.url=https://xiaodu.baidu.com/saiya/log
+#log.ces.url=https://xiaodu.baidu.com/saiya/log
+log.ces.url=bns://group.click-log.dumi.all/saiya/log
+log.ces.bns=group.click-log.dumi.all
+log.ces.api=
