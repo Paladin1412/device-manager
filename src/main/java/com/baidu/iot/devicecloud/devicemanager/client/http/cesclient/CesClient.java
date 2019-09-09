@@ -30,7 +30,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.CommonConstant.SP
 @Slf4j
 @Component
 public class CesClient extends AbstractHttpClient {
-    private static final String[] CES_LOG_PATH = {"saiya", "log"};
+    private static final String[] CES_LOG_PATH = {"click"};
 
     @Value("${ces.scheme:http://}")
     private String cesScheme;
