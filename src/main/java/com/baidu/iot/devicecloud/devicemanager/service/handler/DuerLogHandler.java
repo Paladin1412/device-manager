@@ -108,8 +108,10 @@ public class DuerLogHandler extends AbstractLinkableDataPointHandler {
             JsonNode dataNode = logObject.path("data");
             if (dataNode.isArray()) {
                 ArrayNode dataArray = (ArrayNode) dataNode;
-                double la = deviceResource.getLatitude();
-                double lo = deviceResource.getLongitude();
+                Float latitude = deviceResource.getLatitude();
+                Float longitude = deviceResource.getLongitude();
+                double la = latitude == null ? 0.0 : latitude;
+                double lo = longitude == null ? 0.0 : longitude;
                 for (JsonNode node : dataArray) {
                     ObjectNode on = (ObjectNode) node;
                     on.set("la", DoubleNode.valueOf(la));
