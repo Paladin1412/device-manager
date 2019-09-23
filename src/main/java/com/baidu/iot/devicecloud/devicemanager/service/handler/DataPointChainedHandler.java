@@ -23,6 +23,8 @@ public class DataPointChainedHandler implements ReactorDispatcherHandler<DataPoi
     DataPointChainedHandler(DuerEventHandler duerEventHandler,
                             DuerBindUtokenHandler duerBindUtokenHandler,
                             Sending2BigpipeHandler sending2BigpipeHandler,
+                            DeviceStatusHandler deviceStatusHandler,
+                            DuerLogHandler duerLogHandler,
                             DataPointAdviceHandler adviceHandler,
                             DiscardHandler discardHandler) {
         // The first link in chain is supposed to handle the most requests
@@ -31,6 +33,8 @@ public class DataPointChainedHandler implements ReactorDispatcherHandler<DataPoi
         this.requestHandler
                 .linkWith(duerBindUtokenHandler)
                 .linkWith(sending2BigpipeHandler)
+                .linkWith(deviceStatusHandler)
+                .linkWith(duerLogHandler)
                 .linkWith(adviceHandler)
                 .linkWith(discardHandler);
 

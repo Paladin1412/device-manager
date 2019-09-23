@@ -20,6 +20,8 @@ public class DataPointConstant {
     public static final String DATA_POINT_OTA_EVENT = "ota_event";
     public static final String DATA_POINT_DUER_TRACE_INFO = "duer_trace_info";
     public static final String DATA_POINT_DUER_BIND_UTOKEN = "duer_bind_utoken";
+    public static final String DATA_POINT_DUER_LOG = "duer_log";
+    public static final String DATA_POINT_DEVICE_STATUS = "device_status";
 
     // Private
     public static final String PRIVATE_PROTOCOL_NAMESPACE = "ai.dueros.private.protocol";

@@ -4,6 +4,7 @@ import com.baidu.iot.devicecloud.devicemanager.adapter.Adapter;
 import com.baidu.iot.devicecloud.devicemanager.bean.DataPointMessage;
 import com.baidu.iot.devicecloud.devicemanager.bean.TlvMessage;
 import com.baidu.iot.devicecloud.devicemanager.client.http.ttsproxyclient.bean.TtsRequest;
+import com.baidu.iot.devicecloud.devicemanager.config.GreyConfiguration;
 import com.baidu.iot.devicecloud.devicemanager.constant.MessageType;
 import com.baidu.iot.devicecloud.devicemanager.constant.TlvConstant;
 import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
@@ -129,6 +130,9 @@ public class DirectiveProcessor {
                                     // all directive packages(0xF006)
                                 }
                                 case TlvConstant.TYPE_DOWNSTREAM_TTS: {
+                                    if (GreyConfiguration.useAsrTTS(cuid)) {
+                                        return group.flatMap(Mono::just);
+                                    }
                                     return group.flatMap(tlv -> {
                                         BinaryNode valueBin = tlv.getValue();
                                         if (valueBin != null && !valueBin.isNull()) {
@@ -186,7 +190,7 @@ public class DirectiveProcessor {
         return Flux.empty();
     }
 
-    public Flux<DataPointMessage> processEvent(String cuid, String sn, Flux<TlvMessage> messages, DataPointMessage origin) {
+    Flux<DataPointMessage> processEvent(String cuid, String sn, Flux<TlvMessage> messages, DataPointMessage origin) {
         if (messages != null) {
             return messages.groupBy(TlvMessage::getType)
                     .flatMap(group -> {
@@ -358,7 +362,9 @@ public class DirectiveProcessor {
                     return Flux.empty();
                 })
                 .flatMap(directive -> {
-                    visitMetadata(cuid, sn, directive, messageType);
+                    if (messageType == MessageType.DATA_POINT || messageType == MessageType.PUSH_MESSAGE || !GreyConfiguration.useAsrTTS(cuid)) {
+                        visitMetadata(cuid, sn, directive, messageType);
+                    }
                     return Flux.just(directive);
                 });
         if (needAppendDialogueFinished) {

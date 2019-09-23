@@ -28,6 +28,9 @@ public class RemoteServerConfig {
     public static String DI_BNS;
     public static String DI_API;
 
+    public static String CES_BNS;
+    public static String CES_API;
+
     @Value("${dproxy.bns:}")
     public void setDproxyBns(String dproxyBns) {
         DPROXY_BNS = dproxyBns;
@@ -76,5 +79,15 @@ public class RemoteServerConfig {
     @Value("${di.api:}")
     public void setDiApi(String diApi) {
         DI_API = diApi;
+    }
+
+    @Value("${log.ces.bns:unknown_bns_ces}")
+    public void setCesBns(String cesBns) {
+        CES_BNS = cesBns;
+    }
+
+    @Value("${log.ces.api:}")
+    public void setCesApi(String cesApi) {
+        CES_API = cesApi;
     }
 }

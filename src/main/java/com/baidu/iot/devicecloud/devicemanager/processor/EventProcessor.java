@@ -17,6 +17,7 @@ import com.baidu.iot.devicecloud.devicemanager.service.TtsService;
 import com.baidu.iot.devicecloud.devicemanager.service.handler.RelayBackendHandler;
 import com.baidu.iot.devicecloud.devicemanager.util.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
 import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -84,6 +85,7 @@ import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_P
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_STANDBY_DEVICE_ID;
 import static com.baidu.iot.devicecloud.devicemanager.constant.PamConstant.PAM_PARAM_USER_AGENT;
 import static com.baidu.iot.devicecloud.devicemanager.server.TcpRelayServer.CONFIRMATION_STATE;
+import static com.baidu.iot.devicecloud.devicemanager.util.HttpUtil.dataPointResponses;
 import static com.baidu.iot.devicecloud.devicemanager.util.NettyUtil.writeAndFlush;
 
 /**
@@ -118,8 +120,12 @@ public class EventProcessor {
     }
 
     public Mono<Object> process(DataPointMessage message) {
-        if (message == null || StringUtils.isEmpty(message.getPayload())) {
-            return Mono.just(emptyResponses.apply(message));
+        if (message == null) {
+            return Mono.just(dataPointResponses(null, COAP_RESPONSE_CODE_DUER_MSG_RSP_UNSUPPORTED_CONTENT_FORMAT, null));
+        }
+        if (StringUtils.isEmpty(message.getPayload())) {
+            return Mono.just(dataPointResponses(message, COAP_RESPONSE_CODE_DUER_MSG_RSP_UNSUPPORTED_CONTENT_FORMAT,
+                    String.format("No payload found. id:%d cuid:%s", message.getId(), message.getDeviceId())));
         }
 
         String accessToken = accessTokenService.getAccessToken(message.getDeviceId(), message.getLogId());
@@ -229,7 +235,13 @@ public class EventProcessor {
                 ObjectNode param = JsonUtil.createObjectNode();
                 param.set(PAM_PARAM_DUEROS_DEVICE_ID, TextNode.valueOf(message.getDeviceId()));
                 param.set(PAM_PARAM_STANDBY_DEVICE_ID, TextNode.valueOf(message.getStandbyDeviceId()));
-                param.set(PAM_PARAM_USER_AGENT, TextNode.valueOf(message.getUserAgent()));
+                try {
+                    JsonNode payloadNode = JsonUtil.readTree(message.getPayload());
+                    String userAgent = payloadNode.path("user-agent").asText();
+                    param.set(PAM_PARAM_USER_AGENT, TextNode.valueOf(StringUtils.hasText(userAgent) ? userAgent : message.getUserAgent()));
+                } catch (Exception e) {
+                    param.set(PAM_PARAM_USER_AGENT, TextNode.valueOf(message.getUserAgent()));
+                }
                 param.set(PAM_PARAM_AUTHORIZATION, TextNode.valueOf(PARAMETER_BEARER + accessToken));
                 param.set(PAM_PARAM_LINK_VERSION, IntNode.valueOf(2));
                 value.set(DCSProxyConstant.JSON_KEY_PARAM, TextNode.valueOf(JsonUtil.serialize(param)));
@@ -326,16 +338,6 @@ public class EventProcessor {
         response.setId(origin.getId());
         response.setPath(DataPointConstant.DATA_POINT_PRIVATE_ERROR);
         response.setPayload(String.format("Couldn't obtain access token for %s", origin.getDeviceId()));
-        return response;
-    };
-
-    private final Function<DataPointMessage, DataPointMessage> emptyResponses = (origin) -> {
-        DataPointMessage response = new DataPointMessage();
-        response.setVersion(origin.getVersion());
-        response.setCode(COAP_RESPONSE_CODE_DUER_MSG_RSP_UNSUPPORTED_CONTENT_FORMAT);
-        response.setId(origin.getId());
-        response.setPath(DataPointConstant.DATA_POINT_PRIVATE_ERROR);
-        response.setPayload(String.format("No payload for %s", origin.getDeviceId()));
         return response;
     };
 

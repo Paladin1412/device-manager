@@ -29,6 +29,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.CES_API;
+import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.CES_BNS;
 import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DCS_PROXY_API;
 import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DCS_PROXY_BNS;
 import static com.baidu.iot.devicecloud.devicemanager.config.remoteserver.RemoteServerConfig.DH_API;
@@ -65,7 +67,8 @@ public class BnsCache {
                 DCS_PROXY_BNS,
                 TTS_PROXY_BNS,
                 DH_BNS,
-                DI_BNS
+                DI_BNS,
+                CES_BNS
         );
 
         Executors
@@ -134,6 +137,10 @@ public class BnsCache {
         return getRandomInetAddress(DI_BNS);
     }
 
+    public static InetSocketAddress getRandomCesAddress() {
+        return getRandomInetAddress(CES_BNS);
+    }
+
     static InetSocketAddress getRandomInetAddress(String bns) {
         try {
             List<String> ipPorts = getIpPorts(bns);
@@ -167,7 +174,9 @@ public class BnsCache {
         }
 
         if (ipPorts.size() < 1) {
-            String backup = null;if (DPROXY_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(DPROXY_API)) {
+            String backup = null;
+
+            if (DPROXY_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(DPROXY_API)) {
                 backup = DPROXY_API;
             } else if (DCS_PROXY_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(DCS_PROXY_API)) {
                 backup = DCS_PROXY_API;
@@ -177,6 +186,8 @@ public class BnsCache {
                 backup = DH_API;
             } else if (DI_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(DI_API)){
                 backup = DI_API;
+            } else if (CES_BNS.equalsIgnoreCase(bns) && StringUtils.hasText(CES_API)){
+                backup = CES_API;
             }
             if (StringUtils.hasText(backup)) {
                 ipPorts.add(backup);
