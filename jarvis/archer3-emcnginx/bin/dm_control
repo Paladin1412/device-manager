@@ -6,6 +6,7 @@ APP=${APP_DIR}/bin/devicecloud-device-manager
 function start(){
     echo "start ..."
     nohup ${APP} >/dev/null 2>${DEVICE_MANAGER_LOG} &
+    echo $! > ${APP_DIR}/log/instance.pid
 }
 
 function stop(){
