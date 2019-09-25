@@ -601,12 +601,7 @@ public class MultipartStreamDecoder {
          * @return {@link Flux}&lt;{@link Part}&gt;
          */
         Flux<Part> parse(ByteBuf buffer) {
-            ByteBuf available;
-            if (pad.readableByteCount() > 0) {
-                available = makeAvailable(buffer);
-            } else {
-                available = buffer;
-            }
+            ByteBuf available = makeAvailable(buffer);
             return Flux.push(partFluxSink -> {
                 while (available.readableBytes() > 0) {
                     switch (currentState) {
@@ -665,11 +660,9 @@ public class MultipartStreamDecoder {
 
         private ByteBuf makeAvailable(ByteBuf buffer) {
             int readablePad = pad.readableByteCount();
-            int size = readablePad > boundaryLength ? boundaryLength : readablePad;
-            ByteBuf available = Unpooled.buffer(size + buffer.readableBytes());
-            available.writeBytes(pad.asByteBuffer(pad.writePosition() - size, size))
+            ByteBuf available = Unpooled.buffer(readablePad + buffer.readableBytes());
+            available.writeBytes(pad.asByteBuffer())
                     .writeBytes(buffer);
-            buffer.clear();
             pad.readPosition(0).writePosition(0);
             return available;
         }
@@ -736,6 +729,10 @@ public class MultipartStreamDecoder {
                 pad.readPosition(0).writePosition(0);
                 return hasNext;
             } catch (IndexOutOfBoundsException e) {
+                byte[] a = buffer.array();
+                byte[] tmp = new byte[buffer.readableBytes()];
+                System.arraycopy(a, pos, tmp, 0, tmp.length);
+                pad.write(tmp);
                 return false;
             }
         }
@@ -881,16 +878,9 @@ public class MultipartStreamDecoder {
                 // need more data
                 return null;
             }
-            int readable = contentBuffer.readableByteCount();
-            if (readable > 0) {
-                do {
-                    this.motherPart.getContents().add(contentBuffer);
-                    contentBuffer = bodyParser.read(buffer);
-                    if (contentBuffer == null) {
-                        // part is finished
-                        return State.PART_FINISHED;
-                    }
-                } while (contentBuffer.readableByteCount() > 0);
+            // As only the first line belongs to a body part, so no need to touch the rest data in the buffer after read the first line
+            if (contentBuffer.readableByteCount() > 0) {
+                this.motherPart.getContents().add(contentBuffer);
             }
             return State.PART_FINISHED;
         }
