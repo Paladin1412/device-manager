@@ -179,6 +179,15 @@ public class AuthenticationService extends AbstractLinkableHandlerAdapter<BaseMe
         String uuid = message.getUuid();
         String key = String.format("%s_%s_%s", uuid, cuid, message.getToken());
 
+        if (StringUtils.hasText(uuid) && uuid.length() > 14) {
+            DeviceResource tmp = new DeviceResource();
+            tmp.setAccessToken(message.getToken());
+            tmp.setCuid(cuid);
+            tmp.setDeviceUuid(uuid);
+            tmp.setCltId(message.getCltId());
+            return Optional.of(tmp);
+        }
+
         try {
             return authCache.get(key, () -> {
                 Log spanLog = logProvider.get(message.getLogId());
